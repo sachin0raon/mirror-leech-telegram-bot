@@ -6,6 +6,7 @@ aria2c --allow-overwrite=true --auto-file-renaming=true --bt-enable-lpd=true --b
        --min-split-size=10M --follow-torrent=mem --check-certificate=false --optimize-concurrent-downloads=true \
        --http-accept-gzip=true --max-file-not-found=0 --max-tries=20  --peer-id-prefix=-qB4520- --reuse-uri=true \
        --content-disposition-default-utf8=true --user-agent=Wget/1.12 --peer-agent=qBittorrent/4.5.2 --quiet=true \
-       --summary-interval=0 --max-upload-limit=1K
+       --summary-interval=0 --max-upload-limit=1K --rpc-allow-origin-all=true --rpc-listen-all=true --rpc-listen-port=6800 \
+       --rpc-secret=testing123 --keep-unfinished-download-result=true --save-not-found=true --save-session-interval=60 --dir=/usr/src/app/downloads
 qbittorrent-nox -d --profile="$(pwd)"
 sabnzbdplus -f sabnzbd/SABnzbd.ini -s :::8070 -b 0 -d -c -l 0 --console
