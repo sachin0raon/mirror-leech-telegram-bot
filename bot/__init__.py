@@ -1,5 +1,5 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from aria2p import API as ariaAPI, Client as ariaClient
+from aria2p import API as ariaAPI, Client as ariaClient, ClientException
 from asyncio import Lock, new_event_loop, set_event_loop
 from logging import (
     getLogger,
@@ -10,12 +10,14 @@ from logging import (
     WARNING,
     ERROR,
 )
-from qbittorrentapi import Client as QbClient
+from qbittorrentapi import Client as QbClient, exceptions as QbExceptions
 from sabnzbdapi import SabnzbdClient
 from socket import setdefaulttimeout
 from time import time
 from tzlocal import get_localzone
 from uvloop import install
+from urllib3.exceptions import HTTPError
+from requests import exceptions as RequestsExceptions
 from .helper.ext_utils.bot_utils import is_empty_or_blank
 from .core.config_manager import Config
 
@@ -77,22 +79,28 @@ drives_names = []
 drives_ids = []
 index_urls = []
 
-aria2 = ariaAPI(ariaClient(
-    host="http://localhost" if is_empty_or_blank(Config.ARIA_HOST) else Config.ARIA_HOST,
-    port=6800 if Config.ARIA_PORT is None else Config.ARIA_PORT,
-    secret="testing123" if is_empty_or_blank(Config.ARIA_SECRET) else Config.ARIA_SECRET))
+try:
+    aria2 = ariaAPI(ariaClient(
+        host="http://localhost" if is_empty_or_blank(Config.ARIA_HOST) else Config.ARIA_HOST,
+        port=6800 if Config.ARIA_PORT is None else Config.ARIA_PORT,
+        secret="testing123" if is_empty_or_blank(Config.ARIA_SECRET) else Config.ARIA_SECRET))
+except (HTTPError, ClientException, RequestsExceptions.RequestException) as e:
+    LOGGER.error(f"Failed to initialize aria2c :: {str(e)}")
 
-qbittorrent_client = QbClient(
-    host="localhost",
-    port=8090,
-    VERIFY_WEBUI_CERTIFICATE=False,
-    REQUESTS_ARGS={"timeout": (30, 60)},
-    HTTPADAPTER_ARGS={
-        "pool_maxsize": 500,
-        "max_retries": 10,
-        "pool_block": True,
-    },
-)
+try:
+    qbittorrent_client = QbClient(
+        host="localhost",
+        port=8090,
+        VERIFY_WEBUI_CERTIFICATE=False,
+        REQUESTS_ARGS={"timeout": (30, 60)},
+        HTTPADAPTER_ARGS={
+            "pool_maxsize": 500,
+            "max_retries": 10,
+            "pool_block": True,
+        },
+    )
+except QbExceptions.APIError as e:
+    LOGGER.error(f"Failed to initialize qbittorrent :: {str(e)}")
 
 sabnzbd_client = SabnzbdClient(
     host="http://localhost",
