@@ -2,12 +2,13 @@ from signal import signal, SIGINT
 from asyncio import gather
 from pyrogram.filters import regex
 from pyrogram.handlers import CallbackQueryHandler
-
+from apscheduler.triggers.interval import IntervalTrigger
+from datetime import datetime, timedelta
 from .core.config_manager import Config
 
 Config.load()
 
-from . import LOGGER, bot_loop
+from . import LOGGER, bot_loop, scheduler, task_dict_lock
 from .core.mltb_client import TgClient
 from .core.handlers import add_handlers
 from .core.startup import (
@@ -33,6 +34,7 @@ from .helper.telegram_helper.message_utils import (
 )
 from .modules import initiate_search_tools, get_packages_version, restart_notification
 from pyngrok import ngrok, conf
+import requests
 
 
 @new_task
@@ -74,6 +76,43 @@ async def start_ngrok() -> None:
         LOGGER.info(f"Ngrok tunnel started: {file_tunnel.public_url}")
     except ngrok.PyngrokError as err:
         LOGGER.error(f"Failed to start ngrok, error: {str(err)}")
+
+
+async def get_trackers() -> None:
+    LOGGER.info("Fetching trackers list")
+    async with task_dict_lock:
+        Config.BT_TRACKERS.clear()
+        Config.BT_TRACKERS_ARIA = '['
+        for index, url in enumerate(Config.BT_TRACKER_URLS):
+            try:
+                track_resp = requests.get(url=url, timeout=5)
+                if track_resp.ok:
+                    if 0 <= index <= 1:
+                        sep = '\n\n'
+                    else:
+                        sep = '\n'
+                    for tracker in track_resp.text.split(sep=sep):
+                        Config.BT_TRACKERS.append(tracker.strip())
+                        Config.BT_TRACKERS_ARIA += f"{tracker.strip()},"
+                    track_resp.close()
+                else:
+                    LOGGER.error(f"Failed to get data from :: {url}")
+            except requests.exceptions.RequestException:
+                LOGGER.error(f"Failed to send request to :: {url}")
+        Config.BT_TRACKERS_ARIA += ']'
+    LOGGER.info(f"Retrieved {len(Config.BT_TRACKERS)} trackers")
+
+
+scheduler.add_job(
+        get_trackers,
+        trigger=IntervalTrigger(hours=12),
+        id="BT_TRACKERS",
+        name="GET_TRACKERS",
+        misfire_grace_time=15,
+        max_instances=1,
+        next_run_time=datetime.now() + timedelta(seconds=5),
+        replace_existing=True,
+    )
 
 
 async def main():

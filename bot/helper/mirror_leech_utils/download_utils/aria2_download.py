@@ -27,6 +27,8 @@ async def add_aria2c_download(listener, dpath, header, ratio, seed_time):
             a2c_opt["pause-metadata"] = "true"
         else:
             a2c_opt["pause"] = "true"
+    a2c_opt['bt-tracker'] = Config.BT_TRACKERS_ARIA
+    a2c_opt['file-allocation'] = 'none'
 
     try:
         download = (await sync_to_async(aria2.add, listener.link, a2c_opt))[0]

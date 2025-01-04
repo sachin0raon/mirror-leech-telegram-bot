@@ -60,6 +60,13 @@ class Config:
     WEB_PINCODE = False
     YT_DLP_OPTIONS = ""
     NGROK_AUTH_TOKEN = ""
+    BT_TRACKERS = []
+    BT_TRACKERS_ARIA = ""
+    BT_TRACKER_URLS = [
+        "https://cf.trackerslist.com/all.txt",
+        "https://ngosang.github.io/trackerslist/trackers_all_http.txt",
+        "https://raw.githubusercontent.com/hezhijie0327/Trackerslist/main/trackerslist_tracker.txt"
+    ]
 
     @classmethod
     def get(cls, key):
