@@ -13,7 +13,7 @@ from psutil import (
 )
 
 from .. import bot_start_time
-from ..helper.ext_utils.status_utils import get_readable_file_size, get_readable_time
+from ..helper.ext_utils.status_utils import get_readable_file_size, get_readable_time, get_cpu_temp
 from ..helper.ext_utils.bot_utils import cmd_exec, new_task
 from ..helper.telegram_helper.message_utils import send_message
 
@@ -47,6 +47,7 @@ async def bot_stats(_, message):
 <b>Download:</b> {get_readable_file_size(net_io_counters().bytes_recv)}
 
 <b>CPU:</b> {cpu_percent(interval=0.5)}%
+<b>TEMP:</b> {await get_cpu_temp()}
 <b>RAM:</b> {memory.percent}%
 <b>DISK:</b> {disk}%
 
