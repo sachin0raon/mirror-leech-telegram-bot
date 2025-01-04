@@ -70,6 +70,8 @@ class Config:
     ARIA_HOST = ""
     ARIA_SECRET = ""
     ARIA_PORT = 6800
+    TOKEN_PICKLE_FILE_URL = ""
+    COOKIE_FILE_URL = ""
 
     @classmethod
     def get(cls, key):

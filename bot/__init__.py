@@ -17,7 +17,7 @@ from time import time
 from tzlocal import get_localzone
 from uvloop import install
 from urllib3.exceptions import HTTPError
-from requests import exceptions as RequestsExceptions
+from requests import get as RequestsGet, exceptions as RequestsExceptions
 from .helper.ext_utils.bot_utils import is_empty_or_blank
 from .core.config_manager import Config
 
@@ -109,3 +109,31 @@ sabnzbd_client = SabnzbdClient(
 )
 
 scheduler = AsyncIOScheduler(timezone=str(get_localzone()), event_loop=bot_loop)
+
+if not is_empty_or_blank(Config.TOKEN_PICKLE_FILE_URL):
+    LOGGER.info("Downloading token.pickle file")
+    try:
+        pickle_file = RequestsGet(url=Config.TOKEN_PICKLE_FILE_URL, timeout=5)
+    except RequestsExceptions.RequestException:
+        LOGGER.error("Failed to download token.pickle file")
+    else:
+        if pickle_file.ok:
+            with open("/usr/src/app/token.pickle", 'wb') as f:
+                f.write(pickle_file.content)
+        else:
+            LOGGER.warning("Failed to get pickle file data")
+        pickle_file.close()
+
+if not is_empty_or_blank(Config.COOKIE_FILE_URL):
+    LOGGER.info("Downloading cookie file")
+    try:
+        cookie_file = RequestsGet(url=Config.COOKIE_FILE_URL, timeout=5)
+    except RequestsExceptions.RequestException:
+        LOGGER.error("Failed to download cookie file")
+    else:
+        if cookie_file.ok:
+            with open("/usr/src/app/cookies.txt", 'wt', encoding='utf-8') as f:
+                f.write(cookie_file.text)
+        else:
+            LOGGER.warning("Failed to get cookie file data")
+        cookie_file.close()
