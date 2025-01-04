@@ -16,6 +16,10 @@ from socket import setdefaulttimeout
 from time import time
 from tzlocal import get_localzone
 from uvloop import install
+from .helper.ext_utils.bot_utils import is_empty_or_blank
+from .core.config_manager import Config
+
+Config.load()
 
 # from faulthandler import enable as faulthandler_enable
 # faulthandler_enable()
@@ -73,7 +77,10 @@ drives_names = []
 drives_ids = []
 index_urls = []
 
-aria2 = ariaAPI(ariaClient(host="http://localhost", port=6800, secret=""))
+aria2 = ariaAPI(ariaClient(
+    host="http://localhost" if is_empty_or_blank(Config.ARIA_HOST) else Config.ARIA_HOST,
+    port=6800 if Config.ARIA_PORT is None else Config.ARIA_PORT,
+    secret="testing123" if is_empty_or_blank(Config.ARIA_SECRET) else Config.ARIA_SECRET))
 
 qbittorrent_client = QbClient(
     host="localhost",

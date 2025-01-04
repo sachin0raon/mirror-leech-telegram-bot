@@ -6,7 +6,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timedelta
 from .core.config_manager import Config
 
-Config.load()
+#Config.load()
 
 from . import LOGGER, bot_loop, scheduler, task_dict_lock
 from .core.mltb_client import TgClient

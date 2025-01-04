@@ -67,6 +67,9 @@ class Config:
         "https://ngosang.github.io/trackerslist/trackers_all_http.txt",
         "https://raw.githubusercontent.com/hezhijie0327/Trackerslist/main/trackerslist_tracker.txt"
     ]
+    ARIA_HOST = ""
+    ARIA_SECRET = ""
+    ARIA_PORT = 6800
 
     @classmethod
     def get(cls, key):
