@@ -229,3 +229,7 @@ def loop_thread(func):
         return future.result() if wait else future
 
     return wrapper
+
+
+def is_empty_or_blank(value: str):
+    return value is None or not value.strip()
