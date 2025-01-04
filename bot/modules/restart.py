@@ -112,7 +112,7 @@ async def confirm_restart(_, query):
         if st := intervals["status"]:
             for intvl in list(st.values()):
                 intvl.cancel()
-        await sync_to_async(clean_all)
+        #await sync_to_async(clean_all)
         if sabnzbd_client.LOGGED_IN:
             await gather(
                 sabnzbd_client.pause_all(),

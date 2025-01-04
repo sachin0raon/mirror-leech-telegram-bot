@@ -129,7 +129,7 @@ async def main():
     await gather(
         save_settings(),
         jdownloader.boot(),
-        sync_to_async(clean_all),
+        #sync_to_async(clean_all),
         initiate_search_tools(),
         get_packages_version(),
         restart_notification(),
