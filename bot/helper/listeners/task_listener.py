@@ -157,7 +157,7 @@ class TaskListener(TaskConfig):
             )
             return
 
-        if self.folder_name:
+        if self.folder_name and self.folder_name.split("/")[-1]:
             self.name = self.folder_name.split("/")[-1]
 
         if not await aiopath.exists(f"{self.dir}/{self.name}"):

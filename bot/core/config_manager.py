@@ -70,6 +70,7 @@ class Config:
     ]
     ARIA_HOST = ""
     ARIA_SECRET = ""
+    ARIA_DOWNLOAD_PATH = ""
     ARIA_PORT = 6800
     TOKEN_PICKLE_FILE_URL = ""
     COOKIE_FILE_URL = ""

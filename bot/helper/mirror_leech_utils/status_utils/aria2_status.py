@@ -3,7 +3,8 @@ from time import time
 from .... import aria2, LOGGER
 from ...ext_utils.bot_utils import sync_to_async
 from ...ext_utils.status_utils import MirrorStatus, get_readable_time
-
+from aria2p import client
+from requests import exceptions
 
 def get_download(gid, old_info=None):
     try:
@@ -24,13 +25,16 @@ class Aria2Status:
         self.seeding = seeding
 
     def update(self):
-        if self._download is None:
-            self._download = get_download(self._gid, self._download)
-        else:
-            self._download = self._download.live
-        if self._download.followed_by_ids:
-            self._gid = self._download.followed_by_ids[0]
-            self._download = get_download(self._gid)
+        try:
+            if self._download is None:
+                self._download = get_download(self._gid, self._download)
+            else:
+                self._download = self._download.live
+            if self._download.followed_by_ids:
+                self._gid = self._download.followed_by_ids[0]
+                self._download = get_download(self._gid)
+        except (client.ClientException, exceptions.RequestException) as e:
+            LOGGER.error(f"Failed to update aria2c download message")
 
     def progress(self):
         return self._download.progress_string()

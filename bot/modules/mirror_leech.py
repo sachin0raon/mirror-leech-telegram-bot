@@ -138,6 +138,7 @@ class Mirror(TaskListener):
 
         headers = args["-h"]
         is_bulk = args["-b"]
+        max_download_speed = args["-ms"]
 
         bulk_start = 0
         bulk_end = 0
@@ -364,7 +365,7 @@ class Mirror(TaskListener):
                 headers += (
                     f" authorization: Basic {b64encode(auth.encode()).decode('ascii')}"
                 )
-            await add_aria2c_download(self, path, headers, ratio, seed_time)
+            await add_aria2c_download(self, path, headers, ratio, seed_time, max_download_speed)
 
 
 async def mirror(client, message):
