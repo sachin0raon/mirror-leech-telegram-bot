@@ -48,7 +48,7 @@ async def _on_download_started(api, gid):
         msg, button = await stop_duplicate_check(task.listener)
         if msg:
             await task.listener.on_download_error(msg, button)
-            await sync_to_async(api.remove, [download], force=True, files=True)
+            #await sync_to_async(api.remove, [download], force=True, files=True)
             return
 
 
@@ -79,14 +79,14 @@ async def _on_download_complete(api, gid):
                 await task.listener.on_upload_error(
                     f"Seeding stopped with Ratio: {task.ratio()} and Time: {task.seeding_time()}"
                 )
-                await sync_to_async(api.remove, [download], force=True, files=True)
+                #await sync_to_async(api.remove, [download], force=True, files=True)
     else:
         LOGGER.info(f"onDownloadComplete: {download.name} - Gid: {gid}")
         if task := await get_task_by_gid(gid):
             await task.listener.on_download_complete()
             if intervals["stopAll"]:
                 return
-            await sync_to_async(api.remove, [download], force=True, files=True)
+            #await sync_to_async(api.remove, [download], force=True, files=True)
 
 
 @loop_thread
@@ -130,7 +130,7 @@ async def _on_bt_download_complete(api, gid):
             await task.listener.on_upload_error(
                 f"Seeding stopped with Ratio: {task.ratio()} and Time: {task.seeding_time()}"
             )
-            await sync_to_async(api.remove, [download], force=True, files=True)
+            #await sync_to_async(api.remove, [download], force=True, files=True)
         elif (
             task.listener.seed
             and download.is_complete
@@ -140,14 +140,14 @@ async def _on_bt_download_complete(api, gid):
         elif task.listener.seed and not task.listener.is_cancelled:
             async with task_dict_lock:
                 if task.listener.mid not in task_dict:
-                    await sync_to_async(api.remove, [download], force=True, files=True)
+                    #await sync_to_async(api.remove, [download], force=True, files=True)
                     return
                 task_dict[task.listener.mid] = Aria2Status(task.listener, gid, True)
                 task_dict[task.listener.mid].start_time = seed_start_time
             LOGGER.info(f"Seeding started: {download.name} - Gid: {gid}")
             await update_status_message(task.listener.message.chat.id)
-        else:
-            await sync_to_async(api.remove, [download], force=True, files=True)
+        #else:
+        #    await sync_to_async(api.remove, [download], force=True, files=True)
 
 
 @loop_thread
