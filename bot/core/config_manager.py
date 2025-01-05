@@ -60,6 +60,7 @@ class Config:
     WEB_PINCODE = False
     YT_DLP_OPTIONS = ""
     NGROK_AUTH_TOKEN = ""
+    NGROK_HOST_URL = ""
     BT_TRACKERS = []
     BT_TRACKERS_ARIA = ""
     BT_TRACKER_URLS = [

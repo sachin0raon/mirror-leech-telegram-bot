@@ -319,3 +319,9 @@ def add_handlers():
             & CustomFilters.authorized,
         )
     )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            ngrok_info,
+            filters=command(BotCommands.NgrokCommand) & CustomFilters.authorized
+        )
+    )

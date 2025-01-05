@@ -105,6 +105,7 @@ SEARCH_PLUGINS = [
     "https://raw.githubusercontent.com/khensolomon/leyts/master/yts.py",
 ]
 NGROK_AUTH_TOKEN = ""
+NGROK_HOST_URL = ""
 ARIA_HOST = ""
 ARIA_SECRET = ""
 ARIA_PORT = 6800
