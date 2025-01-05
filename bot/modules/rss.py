@@ -629,7 +629,7 @@ Timeout: 60 sec. Argument -c for command and arguments
     elif data[1] == "shutdown":
         if scheduler.running:
             await query.answer()
-            scheduler.shutdown(wait=False)
+            scheduler.get_job(job_id="RSS").remove()
             await sleep(0.5)
             await update_rss_menu(query)
         else:
@@ -648,7 +648,7 @@ async def rss_monitor():
     chat = Config.RSS_CHAT
     if not chat:
         LOGGER.warning("RSS_CHAT not added! Shutting down rss scheduler...")
-        scheduler.shutdown(wait=False)
+        scheduler.get_job(job_id="RSS").remove()
         return
     if len(rss_dict) == 0:
         scheduler.pause()
@@ -781,7 +781,7 @@ def add_job():
     scheduler.add_job(
         rss_monitor,
         trigger=IntervalTrigger(seconds=Config.RSS_DELAY),
-        id="0",
+        id="RSS",
         name="RSS",
         misfire_grace_time=15,
         max_instances=1,

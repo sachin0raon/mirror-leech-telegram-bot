@@ -29,6 +29,7 @@ from ...telegram_helper.message_utils import (
     edit_message,
     delete_message,
 )
+from ....core.config_manager import Config
 
 
 @new_task
@@ -114,6 +115,9 @@ async def get_jd_download_directory():
 
 
 async def add_jd_download(listener, path):
+    if Config.IS_JD_ENABLE is False:
+        await send_message(listener.message, "Unable to download since JDownloader is disabled")
+        return
     try:
         async with jd_lock:
             gid = token_urlsafe(12)

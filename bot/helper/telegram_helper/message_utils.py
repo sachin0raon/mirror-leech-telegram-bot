@@ -1,5 +1,5 @@
 from asyncio import sleep
-from pyrogram.errors import FloodWait, FloodPremiumWait
+from pyrogram.errors import FloodWait, FloodPremiumWait, ButtonUrlInvalid, ButtonDataInvalid
 from re import match as re_match
 from time import time
 
@@ -24,6 +24,10 @@ async def send_message(message, text, buttons=None):
         LOGGER.warning(str(f))
         await sleep(f.value * 1.2)
         return await send_message(message, text, buttons)
+    except (ButtonUrlInvalid, ButtonDataInvalid) as b:
+        LOGGER.error(f"Error while sending message:: {b.__class__.__name__}, Retrying without button")
+        await sleep(2)
+        return await send_message(message, text)
     except Exception as e:
         LOGGER.error(str(e))
         return str(e)
@@ -40,6 +44,10 @@ async def edit_message(message, text, buttons=None):
         LOGGER.warning(str(f))
         await sleep(f.value * 1.2)
         return await edit_message(message, text, buttons)
+    except (ButtonUrlInvalid, ButtonDataInvalid) as b:
+        LOGGER.error(f"Error while editing message:: {b.__class__.__name__}, Retrying without button")
+        await sleep(2)
+        return await edit_message(message, text)
     except Exception as e:
         LOGGER.error(str(e))
         return str(e)
