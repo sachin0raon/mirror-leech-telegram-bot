@@ -16,12 +16,10 @@ from socket import setdefaulttimeout
 from time import time
 from tzlocal import get_localzone
 from uvloop import install
+from os import makedirs, path as ospath
 from urllib3.exceptions import HTTPError
 from requests import get as RequestsGet, exceptions as RequestsExceptions
-from .helper.ext_utils.bot_utils import is_empty_or_blank
 from .core.config_manager import Config
-
-Config.load()
 
 # from faulthandler import enable as faulthandler_enable
 # faulthandler_enable()
@@ -78,13 +76,22 @@ extension_filter = ["aria2", "!qB"]
 drives_names = []
 drives_ids = []
 index_urls = []
+Config.load()
+
+if ospath.exists(Config.DOWNLOAD_DIR) is False:
+    makedirs(name=Config.DOWNLOAD_DIR, exist_ok=True)
+    makedirs(name=f"{Config.DOWNLOAD_DIR}ytdl/audio", exist_ok=True)
+    makedirs(name=f"{Config.DOWNLOAD_DIR}ytdl/video", exist_ok=True)
+
+def is_empty_or_blank(value: str):
+    return value is None or not value.strip()
 
 try:
     aria2 = ariaAPI(ariaClient(
         host="http://localhost" if is_empty_or_blank(Config.ARIA_HOST) else Config.ARIA_HOST,
         port=6800 if Config.ARIA_PORT is None else Config.ARIA_PORT,
         secret="testing123" if is_empty_or_blank(Config.ARIA_SECRET) else Config.ARIA_SECRET))
-except (HTTPError, ClientException, RequestsExceptions.RequestException) as e:
+except (HTTPError, ClientException, RequestsExceptions.RequestException, RequestsExceptions.ConnectionError) as e:
     LOGGER.error(f"Failed to initialize aria2c :: {str(e)}")
 
 try:

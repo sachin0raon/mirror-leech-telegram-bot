@@ -34,7 +34,7 @@ def get_host_ngrok_info() -> str:
 
 
 @new_task
-async def ngrok_info(client, message) -> None:
+async def ngrok_info(_, message) -> None:
     if is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
         await send_message(message, "<code>NGROK_AUTH_TOKEN</code> <b>is missing !</b>")
         return
