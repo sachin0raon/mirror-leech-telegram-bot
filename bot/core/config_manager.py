@@ -73,6 +73,7 @@ class Config:
     ARIA_PORT = 6800
     TOKEN_PICKLE_FILE_URL = ""
     COOKIE_FILE_URL = ""
+    IS_JD_ENABLE = False
 
     @classmethod
     def get(cls, key):
