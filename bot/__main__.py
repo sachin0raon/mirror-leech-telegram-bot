@@ -4,10 +4,8 @@ from pyrogram.filters import regex
 from pyrogram.handlers import CallbackQueryHandler
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timedelta
-from .core.config_manager import Config
 from . import LOGGER, bot_loop, scheduler, task_dict_lock
-from .core.mltb_client import TgClient
-from .core.handlers import add_handlers
+from .core.config_manager import Config
 from .core.startup import (
     load_settings,
     load_configurations,
@@ -17,6 +15,11 @@ from .core.startup import (
     update_qb_options,
     update_variables,
 )
+
+bot_loop.run_until_complete(load_settings())
+
+from .core.mltb_client import TgClient
+from .core.handlers import add_handlers
 from .helper.ext_utils.telegraph_helper import telegraph
 from .helper.ext_utils.bot_utils import sync_to_async, create_help_buttons, new_task, is_empty_or_blank
 from .helper.ext_utils.files_utils import clean_all, exit_clean_up

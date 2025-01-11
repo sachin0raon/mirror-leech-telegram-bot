@@ -13,7 +13,7 @@ from .... import (
     task_dict,
     task_dict_lock,
     LOGGER,
-    jd_lock,
+    jd_listener_lock,
     jd_downloads,
 )
 from ...ext_utils.bot_utils import new_task
@@ -119,7 +119,7 @@ async def add_jd_download(listener, path):
         await send_message(listener.message, "Unable to download since JDownloader is disabled")
         return
     try:
-        async with jd_lock:
+        async with jd_listener_lock:
             gid = token_urlsafe(12)
             if not jdownloader.is_connected:
                 raise MYJDException(jdownloader.error)
@@ -269,7 +269,7 @@ async def add_jd_download(listener, path):
                 package_ids=online_packages
             )
             await listener.on_download_error(msg, button)
-            async with jd_lock:
+            async with jd_listener_lock:
                 del jd_downloads[gid]
             return
 
@@ -279,7 +279,7 @@ async def add_jd_download(listener, path):
                     package_ids=online_packages
                 )
                 await listener.remove_from_same_dir()
-                async with jd_lock:
+                async with jd_listener_lock:
                     del jd_downloads[gid]
                 return
             else:
@@ -288,7 +288,7 @@ async def add_jd_download(listener, path):
                     raise MYJDException(
                         "Select: This Download have been removed manually!"
                     )
-                async with jd_lock:
+                async with jd_listener_lock:
                     jd_downloads[gid]["ids"] = online_packages
 
         add_to_queue, event = await check_running_tasks(listener)
@@ -306,7 +306,7 @@ async def add_jd_download(listener, path):
             online_packages = await get_online_packages(path)
             if not online_packages:
                 raise MYJDException("Queue: This Download have been removed manually!")
-            async with jd_lock:
+            async with jd_listener_lock:
                 jd_downloads[gid]["ids"] = online_packages
 
         await jdownloader.device.linkgrabber.move_to_downloadlist(
@@ -332,7 +332,7 @@ async def add_jd_download(listener, path):
                 "Download List: This Download have been removed manually!"
             )
 
-        async with jd_lock:
+        async with jd_listener_lock:
             jd_downloads[gid]["status"] = "down"
             jd_downloads[gid]["ids"] = online_packages
 
@@ -352,7 +352,7 @@ async def add_jd_download(listener, path):
                 await send_status_message(listener.message)
     except (Exception, MYJDException) as e:
         await listener.on_download_error(f"{e}".strip())
-        async with jd_lock:
+        async with jd_listener_lock:
             if gid in jd_downloads:
                 del jd_downloads[gid]
     finally:

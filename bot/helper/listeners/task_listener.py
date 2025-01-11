@@ -26,6 +26,7 @@ from ..ext_utils.files_utils import (
     clean_download,
     clean_target,
     join_files,
+    create_recursive_symlink,
     get_mime_type,
     count_files_and_folders,
 )
@@ -122,7 +123,9 @@ class TaskListener(TaskConfig):
                                 des_id = list(self.same_dir[self.folder_name]["tasks"])[
                                     0
                                 ]
-                                des_path = f"{Config.DOWNLOAD_DIR}{des_id}{self.folder_name}"
+                                des_path = (
+                                    f"{Config.DOWNLOAD_DIR}{des_id}{self.folder_name}"
+                                )
                                 await makedirs(des_path, exist_ok=True)
                                 LOGGER.info(f"Moving files from {self.mid} to {des_id}")
                                 for item in await listdir(spath):
@@ -147,18 +150,17 @@ class TaskListener(TaskConfig):
         if not (self.is_torrent or self.is_qbit):
             self.seed = False
 
-        unwanted_files = []
-        unwanted_files_size = []
-        files_to_delete = []
-
         if multi_links:
+            self.seed = False
             await self.on_upload_error(
                 f"{self.name} Downloaded!\n\nWaiting for other tasks to finish..."
             )
             return
+        elif self.same_dir:
+            self.seed = False
 
-        if self.folder_name and self.folder_name.split("/")[-1]:
-            self.name = self.folder_name.split("/")[-1]
+        if self.folder_name:
+            self.name = self.folder_name.strip("/")
 
         if not await aiopath.exists(f"{self.dir}/{self.name}"):
             try:
@@ -170,9 +172,18 @@ class TaskListener(TaskConfig):
                 await self.on_upload_error(str(e))
                 return
 
-        up_path = f"{self.dir}/{self.name}"
-        self.is_file = await aiopath.isfile(up_path)
-        self.size = await get_path_size(up_path)
+        dl_path = f"{self.dir}/{self.name}"
+        self.size = await get_path_size(dl_path)
+        self.is_file = await aiopath.isfile(dl_path)
+
+        if self.seed:
+            self.up_dir = f"{self.dir}10000"
+            up_path = f"{self.up_dir}/{self.name}"
+            await create_recursive_symlink(self.dir, self.up_dir)
+            LOGGER.info(f"Shortcut created: {dl_path} -> {up_path}")
+        else:
+            up_path = dl_path
+
         if not Config.QUEUE_ALL:
             async with queue_dict_lock:
                 if self.mid in non_queued_dl:
@@ -189,9 +200,11 @@ class TaskListener(TaskConfig):
             self.is_file = await aiopath.isfile(up_path)
             up_dir, self.name = up_path.rsplit("/", 1)
             self.size = await get_path_size(up_dir)
-            self.subproc = None
             self.subname = ""
             self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         if self.ffmpeg_cmds:
             up_path = await self.proceed_ffmpeg(
@@ -203,9 +216,11 @@ class TaskListener(TaskConfig):
             self.is_file = await aiopath.isfile(up_path)
             up_dir, self.name = up_path.rsplit("/", 1)
             self.size = await get_path_size(up_dir)
-            self.subproc = None
             self.subname = ""
             self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         if self.name_sub:
             up_path = await self.substitute(up_path)
@@ -221,59 +236,62 @@ class TaskListener(TaskConfig):
             self.is_file = await aiopath.isfile(up_path)
             up_dir, self.name = up_path.rsplit("/", 1)
             self.size = await get_path_size(up_dir)
-            self.subproc = None
 
         if self.convert_audio or self.convert_video:
             up_path = await self.convert_media(
                 up_path,
                 gid,
-                unwanted_files,
-                unwanted_files_size,
-                files_to_delete,
             )
             if self.is_cancelled:
                 return
             self.is_file = await aiopath.isfile(up_path)
             up_dir, self.name = up_path.rsplit("/", 1)
             self.size = await get_path_size(up_dir)
-            self.subproc = None
             self.subname = ""
             self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         if self.sample_video:
-            up_path = await self.generate_sample_video(
-                up_path, gid, unwanted_files, files_to_delete
-            )
+            up_path = await self.generate_sample_video(up_path, gid)
             if self.is_cancelled:
                 return
             self.is_file = await aiopath.isfile(up_path)
             up_dir, self.name = up_path.rsplit("/", 1)
             self.size = await get_path_size(up_dir)
-            self.subproc = None
             self.subname = ""
             self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         if self.compress:
             up_path = await self.proceed_compress(
-                up_path, gid, unwanted_files, files_to_delete
+                up_path,
+                gid,
             )
             self.is_file = await aiopath.isfile(up_path)
             if self.is_cancelled:
                 return
-            self.subproc = None
             self.subname = ""
             self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         up_dir, self.name = up_path.rsplit("/", 1)
         self.size = await get_path_size(up_dir)
 
         if self.is_leech and not self.compress:
-            await self.proceed_split(up_dir, unwanted_files_size, unwanted_files, gid)
+            await self.proceed_split(up_path, gid)
             if self.is_cancelled:
                 return
-            self.subproc = None
             self.subname = ""
             self.subsize = 0
+            self.files_to_proceed = []
+            self.proceed_count = 0
+            self.progress = True
 
         add_to_queue, event = await check_running_tasks(self, "up")
         await start_from_queued()
@@ -287,8 +305,6 @@ class TaskListener(TaskConfig):
             LOGGER.info(f"Start from Queued/Upload: {self.name}")
 
         self.size = await get_path_size(up_dir)
-        for s in unwanted_files_size:
-            self.size -= s
 
         if self.is_leech:
             LOGGER.info(f"Leech Name: {self.name}")
@@ -297,17 +313,17 @@ class TaskListener(TaskConfig):
                 task_dict[self.mid] = TelegramStatus(self, tg, gid, "up")
             await gather(
                 update_status_message(self.message.chat.id),
-                tg.upload(unwanted_files, files_to_delete),
+                tg.upload(),
             )
         elif is_gdrive_id(self.up_dest):
             error_msg = ""
-            LOGGER.info(f"Gdrive Upload Name: {self.name}")
+            #LOGGER.info(f"Gdrive Upload Name: {self.name}")
             #drive = GoogleDriveUpload(self, up_path)
             #async with task_dict_lock:
             #    task_dict[self.mid] = GoogleDriveStatus(self, drive, gid, "up")
             #await gather(
             #    update_status_message(self.message.chat.id),
-            #    sync_to_async(drive.upload, unwanted_files, files_to_delete),
+            #    sync_to_async(drive.upload),
             #)
             new_dir = f"{Config.DOWNLOAD_DIR}{self.name}"
             LOGGER.info(f"Renaming {self.dir} to {new_dir}")
@@ -337,7 +353,7 @@ class TaskListener(TaskConfig):
                 task_dict[self.mid] = RcloneStatus(self, RCTransfer, gid, "up")
             await gather(
                 update_status_message(self.message.chat.id),
-                RCTransfer.upload(up_path, unwanted_files, files_to_delete),
+                RCTransfer.upload(up_path),
             )
 
     async def on_upload_complete(
@@ -387,8 +403,8 @@ class TaskListener(TaskConfig):
                 else:
                     msg += f"\n\nPath: <code>{rclone_path}</code>"
                 if rclone_path and Config.RCLONE_SERVE_URL and not self.private_link:
-                    remote, path = rclone_path.split(":", 1)
-                    url_path = rutils.quote(f"{path}")
+                    remote, rpath = rclone_path.split(":", 1)
+                    url_path = rutils.quote(f"{rpath}")
                     share_url = f"{Config.RCLONE_SERVE_URL}/{remote}/{url_path}"
                     if mime_type == "Folder":
                         share_url += "/"
@@ -412,8 +428,7 @@ class TaskListener(TaskConfig):
             msg += f"\n\n<b>cc: </b>{self.tag}"
             await send_message(self.message, msg, button)
         if self.seed:
-            if self.new_dir:
-                await clean_target(self.new_dir)
+            await clean_target(self.up_dir)
             async with queue_dict_lock:
                 if self.mid in non_queued_up:
                     non_queued_up.remove(self.mid)
@@ -470,8 +485,8 @@ class TaskListener(TaskConfig):
         await start_from_queued()
         await sleep(3)
         await clean_download(self.dir)
-        if self.new_dir:
-            await clean_download(self.new_dir)
+        if self.up_dir:
+            await clean_download(self.up_dir)
         if self.thumb and await aiopath.exists(self.thumb):
             await remove(self.thumb)
 
@@ -508,7 +523,7 @@ class TaskListener(TaskConfig):
         await start_from_queued()
         #await sleep(3)
         #await clean_download(self.dir)
-        if self.new_dir:
-            await clean_download(self.new_dir)
+        if self.up_dir:
+            await clean_download(self.up_dir)
         if self.thumb and await aiopath.exists(self.thumb):
             await remove(self.thumb)
