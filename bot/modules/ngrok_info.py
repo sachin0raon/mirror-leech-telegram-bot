@@ -17,7 +17,7 @@ def get_host_ngrok_info() -> str:
     for url in ngrok_api_url:
         LOGGER.info(f"Fetching host ngrok tunnels info :: {url}")
         try:
-            response = rget(url, headers={'Content-Type': 'application/json'})
+            response = rget(url, headers={'Content-Type': 'application/json'}, timeout=2)
             if response.ok:
                 tunnels = response.json()["tunnels"]
                 for tunnel in tunnels:
@@ -36,7 +36,7 @@ def get_host_ngrok_info() -> str:
 @new_task
 async def ngrok_info(_, message) -> None:
     if is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
-        await send_message(message, "<code>NGROK_AUTH_TOKEN</code> <b>is missing !</b>")
+        await send_message(message, f"<code>NGROK_AUTH_TOKEN</code> <b>is missing !</b>\n{get_host_ngrok_info()}")
         return
     LOGGER.info("Getting ngrok tunnel info")
     try:
