@@ -96,15 +96,15 @@ SPLIT_REGEX = r"\.r\d+$|\.7z\.\d+$|\.z\d+$|\.zip\.\d+$"
 
 
 def is_first_archive_split(file):
-    return bool(re_search(FIRST_SPLIT_REGEX, file))
+    return bool(re_search(FIRST_SPLIT_REGEX, file.lower(), I))
 
 
 def is_archive(file):
-    return file.endswith(tuple(ARCH_EXT))
+    return file.lower().endswith(tuple(ARCH_EXT))
 
 
 def is_archive_split(file):
-    return bool(re_search(SPLIT_REGEX, file))
+    return bool(re_search(SPLIT_REGEX, file.lower(), I))
 
 
 async def clean_target(opath):
@@ -134,6 +134,8 @@ def clean_all():
     try:
         LOGGER.info("Cleaning Download Directory")
         rmtree(Config.DOWNLOAD_DIR, ignore_errors=True)
+        if ospath.exists("Thumbnails"):
+            rmtree("Thumbnails", ignore_errors=True)
     except:
         pass
     makedirs(Config.DOWNLOAD_DIR, exist_ok=True)
@@ -141,7 +143,7 @@ def clean_all():
 
 def exit_clean_up(signal, frame):
     try:
-        LOGGER.info("Please wait, while we clean up and stop the running downloads")
+        LOGGER.info("Please wait! Bot clean up and stop the running downloads...")
         #clean_all()
         srun(
             [
@@ -196,7 +198,7 @@ async def count_files_and_folders(opath, extension_filter):
     for _, dirs, files in await sync_to_async(walk, opath):
         total_files += len(files)
         for f in files:
-            if f.endswith(tuple(extension_filter)):
+            if f.lower().endswith(tuple(extension_filter)):
                 total_files -= 1
         total_folders += len(dirs)
     return total_folders, total_files
@@ -266,7 +268,6 @@ async def join_files(opath):
 
 
 async def split_file(f_path, split_size, listener):
-    listener.subsize = 0
     out_path = f"{f_path}."
     if listener.is_cancelled:
         return False
@@ -317,7 +318,7 @@ class SevenZ:
             or self._listener.subproc.stdout.at_eof()
         ):
             try:
-                line = await wait_for(self._listener.subproc.stdout.readline(), 2)
+                line = await wait_for(self._listener.subproc.stdout.readline(), 5)
             except:
                 break
             line = line.decode().strip()
@@ -347,7 +348,7 @@ class SevenZ:
                     self._processed_bytes = 0
                     self._percentage = "0%"
                 s = b""
-            await sleep(0.1)
+            await sleep(0.05)
 
         self._processed_bytes = 0
         self._percentage = "0%"
