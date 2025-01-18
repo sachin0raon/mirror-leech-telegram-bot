@@ -1,10 +1,11 @@
-from aiofiles.os import path as aiopath, remove, makedirs
+from aiofiles.os import path as aiopath, remove, makedirs, listdir
 from asyncio import sleep, gather
 from os import walk, path as ospath
 from secrets import token_urlsafe
 from aioshutil import move, rmtree
 from pyrogram.enums import ChatAction
 from re import sub, I
+from shlex import split
 
 from .. import (
     user_data,
@@ -165,7 +166,6 @@ class TaskConfig:
             else ["aria2", "!qB"]
         )
         if self.link not in ["rcl", "gdl"]:
-            self.link = self.link.strip("/")
             if not self.is_jd:
                 if is_rclone_path(self.link):
                     if not self.link.startswith("mrcc:") and self.user_dict.get(
@@ -182,7 +182,6 @@ class TaskConfig:
         elif self.link == "rcl":
             if not self.is_ytdlp and not self.is_jd:
                 self.link = await RcloneList(self).get_rclone_path("rcd")
-                self.link = self.link.strip("/")
                 if not is_rclone_path(self.link):
                     raise ValueError(self.link)
         elif self.link == "gdl":
@@ -612,7 +611,7 @@ class TaskConfig:
     async def proceed_ffmpeg(self, dl_path, gid):
         checked = False
         cmds = [
-            [part.strip() for part in item.split() if part.strip()]
+            [part.strip() for part in split(item) if part.strip()]
             for item in self.ffmpeg_cmds
         ]
         try:
@@ -648,9 +647,13 @@ class TaskConfig:
                         break
                     elif is_video and ext == "audio":
                         break
-                    elif is_audio and ext == "video":
+                    elif is_audio and not is_video and ext == "video":
                         break
-                    elif ext != "all" and not dl_path.lower().endswith(ext):
+                    elif ext not in [
+                        "all",
+                        "audio",
+                        "video",
+                    ] and not dl_path.lower().endswith(ext):
                         break
                     new_folder = ospath.splitext(dl_path)[0]
                     name = ospath.basename(dl_path)
@@ -673,7 +676,7 @@ class TaskConfig:
                     if res:
                         if delete_files:
                             await remove(file_path)
-                            if len(res) == 1:
+                            if len(await listdir(new_folder)) == 1:
                                 folder = new_folder.rsplit("/", 1)[0]
                                 self.name = ospath.basename(res[0])
                                 if self.name.startswith("ffmpeg"):
@@ -688,6 +691,7 @@ class TaskConfig:
                             dl_path = new_folder
                             self.name = new_folder.rsplit("/", 1)[-1]
                     else:
+                        await move(file_path, dl_path)
                         await rmtree(new_folder)
                 else:
                     for dirpath, _, files in await sync_to_async(
@@ -703,9 +707,13 @@ class TaskConfig:
                                 continue
                             elif is_video and ext == "audio":
                                 continue
-                            elif is_audio and ext == "video":
+                            elif is_audio and not is_video and ext == "video":
                                 continue
-                            elif ext != "all" and not f_path.lower().endswith(ext):
+                            elif ext not in [
+                                "all",
+                                "audio",
+                                "video",
+                            ] and not f_path.lower().endswith(ext):
                                 continue
                             self.proceed_count += 1
                             var_cmd[index + 1] = f_path
