@@ -21,7 +21,7 @@ def get_host_ngrok_info() -> str:
             if response.ok:
                 tunnels = response.json()["tunnels"]
                 for tunnel in tunnels:
-                    if "ssh" not in tunnel["name"].lower():
+                    if "ssh" not in tunnel["name"].lower() and "tls:" not in tunnel["public_url"]:
                         msg += f'\n⚡ <b>{tunnel["name"]}</b>: <a href="{tunnel["public_url"]}">Click Here</a>'
                     else:
                         msg += f'\n⚡ <b>{tunnel["name"]}</b>: <code>{tunnel["public_url"]}</code>'
