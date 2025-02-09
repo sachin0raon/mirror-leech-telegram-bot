@@ -9,8 +9,8 @@ from pyrogram.filters import create
 from pyrogram.handlers import MessageHandler
 from time import time
 from re import compile, I
-
-from .. import scheduler, rss_dict, LOGGER
+from requests import get as RequestsGet, exceptions as RequestsExceptions
+from .. import scheduler, rss_dict, task_dict_lock, LOGGER
 from ..core.config_manager import Config
 from ..helper.ext_utils.bot_utils import new_task, arg_parser, get_size_bytes
 from ..helper.ext_utils.status_utils import get_readable_file_size
@@ -809,6 +809,31 @@ async def rss_monitor():
         scheduler.pause()
 
 
+async def get_trackers() -> None:
+    LOGGER.info("Fetching trackers list")
+    async with task_dict_lock:
+        Config.BT_TRACKERS.clear()
+        Config.BT_TRACKERS_ARIA = '['
+        for index, url in enumerate(Config.BT_TRACKER_URLS):
+            try:
+                track_resp = RequestsGet(url=url, timeout=5)
+                if track_resp.ok:
+                    if 0 <= index <= 1:
+                        sep = '\n\n'
+                    else:
+                        sep = '\n'
+                    for tracker in track_resp.text.split(sep=sep):
+                        Config.BT_TRACKERS.append(tracker.strip())
+                        Config.BT_TRACKERS_ARIA += f"{tracker.strip()},"
+                    track_resp.close()
+                else:
+                    LOGGER.error(f"Failed to get data from :: {url}")
+            except RequestsExceptions.RequestException:
+                LOGGER.error(f"Failed to send request to :: {url}")
+        Config.BT_TRACKERS_ARIA += ']'
+    LOGGER.info(f"Retrieved {len(Config.BT_TRACKERS)} trackers")
+
+
 def add_job():
     scheduler.add_job(
         rss_monitor,
@@ -822,5 +847,18 @@ def add_job():
     )
 
 
+def add_tracker_job():
+    scheduler.add_job(
+        get_trackers,
+        trigger=IntervalTrigger(hours=12),
+        id="BT_TRACKERS",
+        name="GET_TRACKERS",
+        misfire_grace_time=15,
+        max_instances=1,
+        next_run_time=datetime.now() + timedelta(seconds=5),
+        replace_existing=True,
+    )
+
 add_job()
+add_tracker_job()
 scheduler.start()
