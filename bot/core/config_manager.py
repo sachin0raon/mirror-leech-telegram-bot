@@ -61,6 +61,22 @@ class Config:
     USE_SERVICE_ACCOUNTS = False
     WEB_PINCODE = False
     YT_DLP_OPTIONS = {}
+    NGROK_AUTH_TOKEN = ""
+    NGROK_HOST_URL = ""
+    BT_TRACKERS = []
+    BT_TRACKERS_ARIA = ""
+    BT_TRACKER_URLS = [
+        "https://cf.trackerslist.com/all.txt",
+        "https://ngosang.github.io/trackerslist/trackers_all_http.txt",
+        "https://raw.githubusercontent.com/hezhijie0327/Trackerslist/main/trackerslist_tracker.txt"
+    ]
+    ARIA_HOST = ""
+    ARIA_SECRET = ""
+    ARIA_DOWNLOAD_PATH = ""
+    ARIA_PORT = 6800
+    TOKEN_PICKLE_FILE_URL = ""
+    COOKIE_FILE_URL = ""
+    IS_JD_ENABLE = False
 
     @classmethod
     def get(cls, key):

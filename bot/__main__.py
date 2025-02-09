@@ -1,6 +1,7 @@
-from . import LOGGER, bot_loop
+from . import LOGGER, bot_loop, is_empty_or_blank, DOWNLOAD_DIR
 from .core.mltb_client import TgClient
-
+from pyngrok import ngrok, conf
+from requests import get as RequestsGet, exceptions as RequestsExceptions
 
 async def main():
     from asyncio import gather
@@ -16,6 +17,10 @@ async def main():
     )
 
     Config.load()
+    download_token_file(Config.TOKEN_PICKLE_FILE_URL)
+    download_cookie_file(Config.COOKIE_FILE_URL)
+    if not is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
+        await start_ngrok(Config.NGROK_AUTH_TOKEN)
     await load_settings()
 
     await gather(TgClient.start_bot(), TgClient.start_user())
@@ -73,6 +78,54 @@ from .helper.telegram_helper.message_utils import (
     delete_message,
 )
 
+def download_token_file(token_file_url: str):
+    if not is_empty_or_blank(token_file_url):
+        LOGGER.info("Downloading token.pickle file")
+        try:
+            pickle_file = RequestsGet(url=token_file_url, timeout=5)
+        except RequestsExceptions.RequestException:
+            LOGGER.error("Failed to download token.pickle file")
+        else:
+            if pickle_file.ok:
+                with open("/usr/src/app/token.pickle", 'wb') as f:
+                    f.write(pickle_file.content)
+            else:
+                LOGGER.warning("Failed to get pickle file data")
+            pickle_file.close()
+
+def download_cookie_file(cookie_file_url):
+    if not is_empty_or_blank(cookie_file_url):
+        LOGGER.info("Downloading cookie file")
+        try:
+            cookie_file = RequestsGet(url=cookie_file_url, timeout=5)
+        except RequestsExceptions.RequestException:
+            LOGGER.error("Failed to download cookie file")
+        else:
+            if cookie_file.ok:
+                with open("/usr/src/app/cookies.txt", 'wt', encoding='utf-8') as f:
+                    f.write(cookie_file.text)
+            else:
+                LOGGER.warning("Failed to get cookie file data")
+            cookie_file.close()
+
+@new_task
+async def start_ngrok(auth_token: str) -> None:
+    LOGGER.info("Starting ngrok tunnel")
+    with open("/usr/src/app/ngrok.yml", "w") as config:
+        config.write(f"version: 2\nauthtoken: {auth_token}\nregion: in\nconsole_ui: false\nlog_level: info")
+    ngrok_conf = conf.PyngrokConfig(
+        config_path="/usr/src/app/ngrok.yml",
+        auth_token=auth_token,
+        region="in",
+        max_logs=5,
+        ngrok_version="v3",
+        monitor_thread=False)
+    try:
+        conf.set_default(ngrok_conf)
+        file_tunnel = ngrok.connect(addr=f"file://{DOWNLOAD_DIR}", proto="http", schemes=["https"], name="files_tunnel", inspect=False)
+        LOGGER.info(f"Ngrok tunnel started: {file_tunnel.public_url}")
+    except ngrok.PyngrokError as err:
+        LOGGER.error(f"Failed to start ngrok, error: {str(err)}")
 
 @new_task
 async def restart_sessions_confirm(_, query):

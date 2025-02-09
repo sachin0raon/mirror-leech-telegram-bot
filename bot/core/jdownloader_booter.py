@@ -22,6 +22,9 @@ class JDownloader(MyJdApi):
 
     @new_task
     async def boot(self):
+        if Config.IS_JD_ENABLE is False:
+            return
+        LOGGER.info("Killing java process")
         await cmd_exec(["pkill", "-9", "-f", "java"])
         if not Config.JD_EMAIL or not Config.JD_PASS:
             self.is_connected = False

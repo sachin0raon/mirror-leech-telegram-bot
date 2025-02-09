@@ -10,10 +10,11 @@ from logging import (
     getLogger,
     ERROR,
 )
-from os import path, remove
+from os import path, remove, environ
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from subprocess import run as srun
+import requests
 
 getLogger("pymongo").setLevel(ERROR)
 
@@ -29,6 +30,23 @@ basicConfig(
     handlers=[FileHandler("log.txt"), StreamHandler()],
     level=INFO,
 )
+
+CONFIG_FILE_URL: str | None = environ.get('CONFIG_FILE_URL')
+if CONFIG_FILE_URL is not None:
+    log_info("Downloading config.py file")
+    try:
+        config_file = requests.get(url=CONFIG_FILE_URL, timeout=5)
+    except requests.exceptions.RequestException:
+        log_error("Failed to download config.py file")
+        exit(1)
+    else:
+        if config_file.ok:
+            with open('/usr/src/app/config.py', 'wt', encoding='utf-8') as f:
+                f.write(config_file.text)
+        else:
+            log_error("Failed to get config.py file data")
+            exit(1)
+        config_file.close()
 
 settings = import_module("config")
 config_file = {

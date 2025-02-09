@@ -106,3 +106,12 @@ SEARCH_PLUGINS = [
     "https://raw.githubusercontent.com/msagca/qbittorrent_plugins/main/uniondht.py",
     "https://raw.githubusercontent.com/khensolomon/leyts/master/yts.py",
 ]
+NGROK_AUTH_TOKEN = ""
+NGROK_HOST_URL = ""
+ARIA_HOST = ""
+ARIA_SECRET = ""
+ARIA_PORT = 6800
+ARIA_DOWNLOAD_PATH = ""
+TOKEN_PICKLE_FILE_URL = ""
+COOKIE_FILE_URL = ""
+IS_JD_ENABLE = False

@@ -21,11 +21,12 @@ from ..telegram_helper.message_utils import update_status_message
 
 
 async def _remove_torrent(hash_, tag):
-    await TorrentManager.qbittorrent.torrents.delete([hash_], True)
-    async with qb_listener_lock:
-        if tag in qb_torrents:
-            del qb_torrents[tag]
-    await TorrentManager.qbittorrent.torrents.delete_tags([tag])
+    pass
+    # await TorrentManager.qbittorrent.torrents.delete([hash_], True)
+    # async with qb_listener_lock:
+    #     if tag in qb_torrents:
+    #         del qb_torrents[tag]
+    # await TorrentManager.qbittorrent.torrents.delete_tags([tag])
 
 
 @new_task

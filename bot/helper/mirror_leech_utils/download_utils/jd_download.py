@@ -18,6 +18,7 @@ from .... import (
 )
 from ...ext_utils.bot_utils import new_task
 from ....core.jdownloader_booter import jdownloader
+from ....core.config_manager import Config
 from ...ext_utils.task_manager import check_running_tasks, stop_duplicate_check
 from ...listeners.jdownloader_listener import on_download_start
 from ...mirror_leech_utils.status_utils.jdownloader_status import JDownloaderStatus
@@ -114,6 +115,9 @@ async def get_jd_download_directory():
 
 
 async def add_jd_download(listener, path):
+    if Config.IS_JD_ENABLE is False:
+        await send_message(listener.message, "Unable to download since JDownloader is disabled")
+        return
     try:
         async with jd_listener_lock:
             gid = token_urlsafe(12)

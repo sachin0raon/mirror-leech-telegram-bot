@@ -1,19 +1,27 @@
-from aioaria2 import Aria2WebsocketClient
+from aioaria2 import Aria2WebsocketClient, exceptions
 from aioqbt.client import create_client
+from aioqbt.client import APIClient
 from asyncio import gather
 from pathlib import Path
-
-from .. import LOGGER, aria2_options
-
+from urllib3.exceptions import HTTPError
+from requests import exceptions as RequestsExceptions
+from .. import LOGGER, aria2_options, is_empty_or_blank
+from config_manager import Config
 
 class TorrentManager:
-    aria2 = None
-    qbittorrent = None
+    aria2:Aria2WebsocketClient = None
+    qbittorrent:APIClient = None
 
     @classmethod
     async def initiate(cls):
-        cls.aria2 = await Aria2WebsocketClient.new("http://localhost:6800/jsonrpc")
-        cls.qbittorrent = await create_client("http://localhost:8090/api/v2/")
+        try:
+            aria_host = "http://localhost" if is_empty_or_blank(Config.ARIA_HOST) else Config.ARIA_HOST
+            aria_port = 6800 if Config.ARIA_PORT is None else Config.ARIA_PORT
+            aria_secret = "testing123" if is_empty_or_blank(Config.ARIA_SECRET) else Config.ARIA_SECRET
+            cls.aria2 = await Aria2WebsocketClient.new(url=f"{aria_host}:{aria_port}/jsonrpc", token=aria_secret)
+            cls.qbittorrent = await create_client("http://localhost:8090/api/v2/")
+        except (HTTPError, exceptions.Aria2rpcException, RequestsExceptions.RequestException, RequestsExceptions.ConnectionError) as e:
+            LOGGER.critical(f"Failed to initialize aria2c :: {str(e)}")
 
     @classmethod
     async def close_all(cls):

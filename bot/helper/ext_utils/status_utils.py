@@ -1,8 +1,9 @@
 from html import escape
-from psutil import virtual_memory, cpu_percent, disk_usage
+from psutil import virtual_memory, cpu_percent, disk_usage, sensors_temperatures
 from time import time
 from asyncio import iscoroutinefunction, gather
-
+from typing import Optional
+from bot_utils import cmd_exec
 from ... import task_dict, task_dict_lock, bot_start_time, status_dict, DOWNLOAD_DIR
 from ...core.config_manager import Config
 from ..telegram_helper.button_build import ButtonMaker
@@ -244,6 +245,30 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
                 buttons.data_button(label, f"status {sid} st {status_value}")
     buttons.data_button("♻️", f"status {sid} ref", position="header")
     button = buttons.build_menu(8)
-    msg += f"<b>CPU:</b> {cpu_percent()}% | <b>FREE:</b> {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)}"
+    msg += f"<b>CPU:</b> {cpu_percent()}% | <b>TEMP:</b> {await get_cpu_temp()} | <b>FREE:</b> {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)}"
     msg += f"\n<b>RAM:</b> {virtual_memory().percent}% | <b>UPTIME:</b> {get_readable_time(time() - bot_start_time)}"
     return msg, button
+
+
+async def get_cpu_temp() -> str:
+    cpu_temp: Optional[str] = None
+    try:
+        cmd_result = await cmd_exec(["vcgencmd", "measure_temp"])
+        if cmd_result[2] == 0:
+            cpu_temp = cmd_result[0].strip().split(sep="=")[1]
+    except (FileNotFoundError, IndexError):
+        pass
+    if cpu_temp is None:
+        try:
+            cpu_temp = f"{sensors_temperatures()['cpu_thermal'][0].current}°C"
+        except (AttributeError, IndexError, KeyError):
+            pass
+    if cpu_temp is None:
+        try:
+            cmd_result = await cmd_exec(["cat", "/sys/class/thermal/thermal_zone0/temp"])
+            if cmd_result[2] == 0:
+                cpu_temp = f"{int(cmd_result[0].strip())/100}°C"
+        except (FileNotFoundError, IndexError, ValueError):
+            pass
+    cpu_temp = "NA" if cpu_temp is None else cpu_temp
+    return cpu_temp

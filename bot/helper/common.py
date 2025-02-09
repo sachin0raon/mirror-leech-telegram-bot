@@ -6,7 +6,7 @@ from aioshutil import move, rmtree
 from pyrogram.enums import ChatAction
 from re import sub, I
 from shlex import split
-
+from time import time
 from .. import (
     user_data,
     multi_tags,
@@ -118,6 +118,7 @@ class TaskConfig:
         self.excluded_extensions = []
         self.files_to_proceed = []
         self.is_super_chat = self.message.chat.type.name in ["SUPERGROUP", "CHANNEL"]
+        self.download_start_time = time()
 
     def get_token_path(self, dest):
         if dest.startswith("mtp:"):

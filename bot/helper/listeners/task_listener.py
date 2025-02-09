@@ -1,9 +1,9 @@
-from aiofiles.os import path as aiopath, listdir, makedirs, remove
+from aiofiles.os import path as aiopath, listdir, makedirs, remove, rename
 from aioshutil import move
 from asyncio import sleep, gather
 from html import escape
 from requests import utils as rutils
-
+from time import time
 from ... import (
     intervals,
     task_dict,
@@ -16,6 +16,7 @@ from ... import (
     queue_dict_lock,
     same_directory_lock,
     DOWNLOAD_DIR,
+    is_empty_or_blank,
 )
 from ...core.config_manager import Config
 from ...core.torrent_manager import TorrentManager
@@ -29,6 +30,8 @@ from ..ext_utils.files_utils import (
     join_files,
     create_recursive_symlink,
     remove_excluded_files,
+    get_mime_type,
+    count_files_and_folders,
 )
 from ..ext_utils.links_utils import is_gdrive_id
 from ..ext_utils.status_utils import get_readable_file_size
@@ -46,6 +49,8 @@ from ..telegram_helper.message_utils import (
     delete_status,
     update_status_message,
 )
+from ..ext_utils.status_utils import get_readable_time
+from pyngrok import ngrok
 
 
 class TaskListener(TaskConfig):
@@ -68,6 +73,18 @@ class TaskListener(TaskConfig):
         self.files_to_proceed = []
         self.proceed_count = 0
         self.progress = True
+
+    async def get_ngrok_file_url(self) -> str:
+        ngrok_url = ''
+        if is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
+            return ngrok_url
+        try:
+            if tunnels := ngrok.get_tunnels():
+                ngrok_url += f"{tunnels[0].public_url}/{self.dir.removeprefix(DOWNLOAD_DIR)}"
+        except ngrok.PyngrokError:
+            LOGGER.warning(f"Failed to get ngrok url for: {self.dir}")
+        LOGGER.info(f"Ngrok URL: {ngrok_url}")
+        return ngrok_url
 
     async def remove_from_same_dir(self):
         async with task_dict_lock:
@@ -298,14 +315,28 @@ class TaskListener(TaskConfig):
             del tg
         elif is_gdrive_id(self.up_dest):
             LOGGER.info(f"Gdrive Upload Name: {self.name}")
-            drive = GoogleDriveUpload(self, up_path)
-            async with task_dict_lock:
-                task_dict[self.mid] = GoogleDriveStatus(self, drive, gid, "up")
-            await gather(
-                update_status_message(self.message.chat.id),
-                sync_to_async(drive.upload),
-            )
-            del drive
+            error_msg = ""
+            new_dir = f"{DOWNLOAD_DIR}{self.name}"
+            LOGGER.info(f"Renaming {self.dir} to {new_dir}")
+            await rename(self.dir, new_dir)
+            self.dir = new_dir
+            up_path = f"{new_dir}/{self.name}"
+            folders, files = await count_files_and_folders(up_path)
+            mime_type = get_mime_type(up_path) if await aiopath.isfile(up_path) else "Folder"
+            if self.is_ytdlp is True:
+                ytdl_path = f"{DOWNLOAD_DIR}ytdl"
+                if "audio" in mime_type:
+                    ytdl_path = f"{ytdl_path}/audio"
+                else:
+                    ytdl_path = f"{ytdl_path}/video"
+                LOGGER.info(f"Moving {self.dir} to {ytdl_path}")
+                try:
+                    await move(self.dir, ytdl_path)
+                    self.dir = f"{ytdl_path}/{self.name}"
+                except Exception as e:
+                    error_msg = f"Unable to move {self.name} to {ytdl_path} | error:: {e.__class__.__name__}"
+                    LOGGER.error(error_msg)
+            await self.on_upload_complete(await self.get_ngrok_file_url(), files, folders, mime_type, error_msg)
         else:
             LOGGER.info(f"Rclone Upload Name: {self.name}")
             RCTransfer = RcloneTransferHelper(self)
@@ -319,7 +350,7 @@ class TaskListener(TaskConfig):
         return
 
     async def on_upload_complete(
-        self, link, files, folders, mime_type, rclone_path="", dir_id=""
+        self, link, files, folders, mime_type, rclone_path="", dir_id="", error_msg=""
     ):
         if (
             self.is_super_chat
@@ -327,7 +358,9 @@ class TaskListener(TaskConfig):
             and Config.DATABASE_URL
         ):
             await database.rm_complete_task(self.message.link)
-        msg = f"<b>Name: </b><code>{escape(self.name)}</code>\n\n<b>Size: </b>{get_readable_file_size(self.size)}"
+        msg = f"<b>Name: </b><code>{escape(self.name)}</code>\n\n<b>Size: </b>{get_readable_file_size(self.size)}\n<b>Elapsed Time: </b>{get_readable_time(time() - self.download_start_time)}"
+        if error_msg:
+            msg += f"\n\n<b>Error: </b><code>{error_msg}</code>\n"
         LOGGER.info(f"Task Done: {self.name}")
         if self.is_leech:
             msg += f"\n<b>Total Files: </b>{folders}"
@@ -394,7 +427,7 @@ class TaskListener(TaskConfig):
                     non_queued_up.remove(self.mid)
             await start_from_queued()
             return
-        await clean_download(self.dir)
+        #await clean_download(self.dir)
         async with task_dict_lock:
             if self.mid in task_dict:
                 del task_dict[self.mid]

@@ -19,6 +19,7 @@ from ..helper.ext_utils.status_utils import (
     get_readable_file_size,
     get_readable_time,
     speed_string_to_bytes,
+    get_cpu_temp,
 )
 from ..helper.telegram_helper.bot_commands import BotCommands
 from ..helper.telegram_helper.message_utils import (
@@ -41,7 +42,7 @@ async def task_status(_, message):
         free = get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)
         msg = f"No Active Tasks!\nEach user can get status for his tasks by adding me or user_id after cmd: /{BotCommands.StatusCommand} me"
         msg += (
-            f"\n<b>CPU:</b> {cpu_percent()}% | <b>FREE:</b> {free}"
+            f"\n<b>CPU:</b> {cpu_percent()}% | <b>TEMP:</b> {await get_cpu_temp()} | <b>FREE:</b> {free}"
             f"\n<b>RAM:</b> {virtual_memory().percent}% | <b>UPTIME:</b> {currentTime}"
         )
         reply_message = await send_message(message, msg)

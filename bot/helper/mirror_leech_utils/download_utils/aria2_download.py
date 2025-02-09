@@ -2,7 +2,7 @@ from aiofiles.os import remove, path as aiopath
 from aiofiles import open as aiopen
 from base64 import b64encode
 
-from .... import task_dict_lock, task_dict, LOGGER
+from .... import task_dict_lock, task_dict, LOGGER, is_empty_or_blank
 from ....core.config_manager import Config
 from ....core.torrent_manager import TorrentManager, is_metadata, aria2_name
 from ...ext_utils.bot_utils import bt_selection_buttons
@@ -11,8 +11,8 @@ from ...mirror_leech_utils.status_utils.aria2_status import Aria2Status
 from ...telegram_helper.message_utils import send_status_message, send_message
 
 
-async def add_aria2_download(listener, dpath, header, ratio, seed_time):
-    a2c_opt = {"dir": dpath}
+async def add_aria2_download(listener, dpath, header, ratio, seed_time, max_download_speed):
+    a2c_opt = {"dir": dpath if is_empty_or_blank(Config.ARIA_DOWNLOAD_PATH) else f'{Config.ARIA_DOWNLOAD_PATH}/{listener.mid}'}
     if listener.name:
         a2c_opt["out"] = listener.name
     if header:
@@ -30,6 +30,12 @@ async def add_aria2_download(listener, dpath, header, ratio, seed_time):
             a2c_opt["pause-metadata"] = "true"
         else:
             a2c_opt["pause"] = "true"
+    LOGGER.info(f"Adding {len(Config.BT_TRACKERS)} trackers")
+    a2c_opt['bt-tracker'] = Config.BT_TRACKERS_ARIA
+    a2c_opt['file-allocation'] = 'none'
+    if max_download_speed:
+        a2c_opt['max-download-limit'] = max_download_speed
+        LOGGER.info(f"Setting max-download-speed:: {max_download_speed}")
 
     try:
         if await aiopath.exists(listener.link):

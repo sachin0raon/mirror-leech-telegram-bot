@@ -81,6 +81,11 @@ async def add_qb_torrent(listener, path, ratio, seed_time):
         tor_info = tor_info[0]
         listener.name = tor_info.name
         ext_hash = tor_info.hash
+        LOGGER.info(f"Adding {len(Config.BT_TRACKERS)} trackers to :: {listener.name}")
+        try:
+            await TorrentManager.qbittorrent.torrents.add_trackers(hash=ext_hash, trackers=Config.BT_TRACKERS)
+        except Exception as e:
+            LOGGER.warning(f"Failed to add trackers to :: {listener.name} : {e.__class__.__name__}")
 
         async with task_dict_lock:
             task_dict[listener.mid] = QbittorrentStatus(listener, queued=add_to_queue)

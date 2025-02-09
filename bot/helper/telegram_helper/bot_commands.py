@@ -41,3 +41,4 @@ class BotCommands:
     UserSetCommand = [f"usetting{Config.CMD_SUFFIX}", f"us{Config.CMD_SUFFIX}"]
     SelectCommand = f"sel{Config.CMD_SUFFIX}"
     RssCommand = f"rss{Config.CMD_SUFFIX}"
+    NgrokCommand = f'ngrok{Config.CMD_SUFFIX}'

@@ -128,13 +128,14 @@ async def clean_download(opath):
 
 
 async def clean_all():
-    await TorrentManager.remove_all()
-    try:
-        LOGGER.info("Cleaning Download Directory")
-        await aiormtree(DOWNLOAD_DIR, ignore_errors=True)
-    except:
-        pass
-    await aiomakedirs(DOWNLOAD_DIR, exist_ok=True)
+    pass
+    #await TorrentManager.remove_all()
+    #try:
+    #    LOGGER.info("Cleaning Download Directory")
+    #    await aiormtree(DOWNLOAD_DIR, ignore_errors=True)
+    #except:
+    #    pass
+    #await aiomakedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
 async def clean_unwanted(opath):
