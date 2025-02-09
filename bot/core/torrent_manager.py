@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib3.exceptions import HTTPError
 from requests import exceptions as RequestsExceptions
 from .. import LOGGER, aria2_options, is_empty_or_blank
-from config_manager import Config
+from .config_manager import Config
 
 class TorrentManager:
     aria2:Aria2WebsocketClient = None

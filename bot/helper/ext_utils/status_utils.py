@@ -3,7 +3,7 @@ from psutil import virtual_memory, cpu_percent, disk_usage, sensors_temperatures
 from time import time
 from asyncio import iscoroutinefunction, gather
 from typing import Optional
-from bot_utils import cmd_exec
+from .bot_utils import cmd_exec
 from ... import task_dict, task_dict_lock, bot_start_time, status_dict, DOWNLOAD_DIR
 from ...core.config_manager import Config
 from ..telegram_helper.button_build import ButtonMaker

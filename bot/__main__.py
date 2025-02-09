@@ -1,7 +1,6 @@
-from . import LOGGER, bot_loop, is_empty_or_blank, DOWNLOAD_DIR
+from . import LOGGER, bot_loop, DOWNLOAD_DIR, is_empty_or_blank, download_token_file, download_cookie_file
 from .core.mltb_client import TgClient
 from pyngrok import ngrok, conf
-from requests import get as RequestsGet, exceptions as RequestsExceptions
 
 async def main():
     from asyncio import gather
@@ -78,35 +77,7 @@ from .helper.telegram_helper.message_utils import (
     delete_message,
 )
 
-def download_token_file(token_file_url: str):
-    if not is_empty_or_blank(token_file_url):
-        LOGGER.info("Downloading token.pickle file")
-        try:
-            pickle_file = RequestsGet(url=token_file_url, timeout=5)
-        except RequestsExceptions.RequestException:
-            LOGGER.error("Failed to download token.pickle file")
-        else:
-            if pickle_file.ok:
-                with open("/usr/src/app/token.pickle", 'wb') as f:
-                    f.write(pickle_file.content)
-            else:
-                LOGGER.warning("Failed to get pickle file data")
-            pickle_file.close()
 
-def download_cookie_file(cookie_file_url):
-    if not is_empty_or_blank(cookie_file_url):
-        LOGGER.info("Downloading cookie file")
-        try:
-            cookie_file = RequestsGet(url=cookie_file_url, timeout=5)
-        except RequestsExceptions.RequestException:
-            LOGGER.error("Failed to download cookie file")
-        else:
-            if cookie_file.ok:
-                with open("/usr/src/app/cookies.txt", 'wt', encoding='utf-8') as f:
-                    f.write(cookie_file.text)
-            else:
-                LOGGER.warning("Failed to get cookie file data")
-            cookie_file.close()
 
 @new_task
 async def start_ngrok(auth_token: str) -> None:

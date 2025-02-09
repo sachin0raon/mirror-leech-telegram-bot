@@ -358,7 +358,7 @@ class TaskListener(TaskConfig):
             and Config.DATABASE_URL
         ):
             await database.rm_complete_task(self.message.link)
-        msg = f"<b>Name: </b><code>{escape(self.name)}</code>\n\n<b>Size: </b>{get_readable_file_size(self.size)}\n<b>Elapsed Time: </b>{get_readable_time(time() - self.download_start_time)}"
+        msg = f"<b>Name: </b><code>{escape(self.name)}</code>\n\n<b>Size: </b>{get_readable_file_size(self.size)}\n\n<b>Elapsed Time: </b>{get_readable_time(time() - self.download_start_time)}"
         if error_msg:
             msg += f"\n\n<b>Error: </b><code>{error_msg}</code>\n"
         LOGGER.info(f"Task Done: {self.name}")
