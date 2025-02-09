@@ -77,6 +77,9 @@ class Config:
     TOKEN_PICKLE_FILE_URL = ""
     COOKIE_FILE_URL = ""
     IS_JD_ENABLE = False
+    QBIT_HOST = ""
+    QBIT_USER = ""
+    QBIT_PASS = ""
 
     @classmethod
     def get(cls, key):

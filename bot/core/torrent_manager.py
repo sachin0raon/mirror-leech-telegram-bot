@@ -7,6 +7,7 @@ from urllib3.exceptions import HTTPError
 from requests import exceptions as RequestsExceptions
 from .. import LOGGER, aria2_options, is_empty_or_blank
 from .config_manager import Config
+from aiohttp.client_exceptions import ClientConnectionError
 
 class TorrentManager:
     aria2:Aria2WebsocketClient = None
@@ -18,10 +19,16 @@ class TorrentManager:
             aria_host = "http://localhost" if is_empty_or_blank(Config.ARIA_HOST) else Config.ARIA_HOST
             aria_port = 6800 if Config.ARIA_PORT is None else Config.ARIA_PORT
             aria_secret = "testing123" if is_empty_or_blank(Config.ARIA_SECRET) else Config.ARIA_SECRET
+            qbit_host = "http://localhost:8090/api/v2/" if is_empty_or_blank(Config.QBIT_HOST) else f"{Config.QBIT_HOST}/api/v2/"
+            qbit_user = None if is_empty_or_blank(Config.QBIT_USER) else Config.QBIT_USER
+            qbit_pass = None if is_empty_or_blank(Config.QBIT_PASS) else Config.QBIT_PASS
             cls.aria2 = await Aria2WebsocketClient.new(url=f"{aria_host}:{aria_port}/jsonrpc", token=aria_secret)
-            cls.qbittorrent = await create_client("http://localhost:8090/api/v2/")
-        except (HTTPError, exceptions.Aria2rpcException, RequestsExceptions.RequestException, RequestsExceptions.ConnectionError) as e:
-            LOGGER.critical(f"Failed to initialize aria2c :: {str(e)}")
+            LOGGER.info("aria2c initialized")
+            cls.qbittorrent = await create_client(url=qbit_host, username=qbit_user, password=qbit_pass)
+            LOGGER.info("qBittorrent initialized")
+        except (HTTPError, exceptions.Aria2rpcException, RequestsExceptions.RequestException,
+                RequestsExceptions.ConnectionError, ClientConnectionError) as e:
+            LOGGER.critical(f"Failed to initialize downloaders :: {str(e)}")
 
     @classmethod
     async def close_all(cls):
