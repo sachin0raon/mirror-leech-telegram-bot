@@ -32,8 +32,7 @@ class TorrentManager:
 
     @classmethod
     async def close_all(cls):
-        await cls.aria2.close()
-        await cls.qbittorrent.close()
+        await gather(cls.aria2.close(), cls.qbittorrent.close())
 
     @classmethod
     async def remove_all(cls):
@@ -46,11 +45,14 @@ class TorrentManager:
         results = await gather(cls.aria2.tellActive(), cls.aria2.tellWaiting(0, 1000))
         for res in results:
             downloads.extend(res)
-        for download in downloads:
-            try:
-                await cls.aria2.forceRemove(download.get("gid"))
-            except:
-                pass
+        tasks = []
+        tasks.extend(
+            cls.aria2.forceRemove(download.get("gid")) for download in downloads
+        )
+        try:
+            await gather(*tasks)
+        except:
+            pass
 
     @classmethod
     async def overall_speed(cls):

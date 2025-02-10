@@ -1,10 +1,12 @@
 from . import LOGGER, bot_loop, DOWNLOAD_DIR, is_empty_or_blank, download_token_file, download_cookie_file
 from .core.mltb_client import TgClient
+from .core.config_manager import Config
+
+Config.load()
 
 
 async def main():
     from asyncio import gather
-    from .core.config_manager import Config
     from .core.startup import (
         load_settings,
         load_configurations,
@@ -16,7 +18,6 @@ async def main():
         start_ngrok,
     )
 
-    Config.load()
     download_token_file(Config.TOKEN_PICKLE_FILE_URL)
     download_cookie_file(Config.COOKIE_FILE_URL)
     if not is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
