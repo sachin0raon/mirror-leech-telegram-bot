@@ -3,6 +3,7 @@ from aiofiles import open as aiopen
 from aioshutil import rmtree
 from asyncio import create_subprocess_exec, create_subprocess_shell
 from importlib import import_module
+from pyngrok import ngrok, conf
 
 from .. import (
     aria2_options,
@@ -20,6 +21,7 @@ from .. import (
     sudo_users,
 )
 from ..helper.ext_utils.db_handler import database
+from ..helper.ext_utils.bot_utils import new_task
 from .config_manager import Config
 from .mltb_client import TgClient
 from .torrent_manager import TorrentManager
@@ -265,3 +267,23 @@ async def load_configurations():
 
     if not await aiopath.exists("accounts"):
         Config.USE_SERVICE_ACCOUNTS = False
+
+
+@new_task
+async def start_ngrok(auth_token: str, download_dir: str) -> None:
+    LOGGER.info("Starting ngrok tunnel")
+    with open("/usr/src/app/ngrok.yml", "w") as config:
+        config.write(f"version: 2\nauthtoken: {auth_token}\nregion: in\nconsole_ui: false\nlog_level: info")
+    ngrok_conf = conf.PyngrokConfig(
+        config_path="/usr/src/app/ngrok.yml",
+        auth_token=auth_token,
+        region="in",
+        max_logs=5,
+        ngrok_version="v3",
+        monitor_thread=False)
+    try:
+        conf.set_default(ngrok_conf)
+        file_tunnel = ngrok.connect(addr=f"file://{download_dir}", proto="http", schemes=["https"], name="files_tunnel", inspect=False)
+        LOGGER.info(f"Ngrok tunnel started: {file_tunnel.public_url}")
+    except ngrok.PyngrokError as err:
+        LOGGER.error(f"Failed to start ngrok, error: {str(err)}")

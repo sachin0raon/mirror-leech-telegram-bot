@@ -1,6 +1,6 @@
 from . import LOGGER, bot_loop, DOWNLOAD_DIR, is_empty_or_blank, download_token_file, download_cookie_file
 from .core.mltb_client import TgClient
-from pyngrok import ngrok, conf
+
 
 async def main():
     from asyncio import gather
@@ -13,13 +13,14 @@ async def main():
         update_nzb_options,
         update_qb_options,
         update_variables,
+        start_ngrok,
     )
 
     Config.load()
     download_token_file(Config.TOKEN_PICKLE_FILE_URL)
     download_cookie_file(Config.COOKIE_FILE_URL)
     if not is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
-        await start_ngrok(Config.NGROK_AUTH_TOKEN)
+        await start_ngrok(Config.NGROK_AUTH_TOKEN, DOWNLOAD_DIR)
     await load_settings()
 
     await gather(TgClient.start_bot(), TgClient.start_user())
@@ -77,26 +78,6 @@ from .helper.telegram_helper.message_utils import (
     delete_message,
 )
 
-
-
-@new_task
-async def start_ngrok(auth_token: str) -> None:
-    LOGGER.info("Starting ngrok tunnel")
-    with open("/usr/src/app/ngrok.yml", "w") as config:
-        config.write(f"version: 2\nauthtoken: {auth_token}\nregion: in\nconsole_ui: false\nlog_level: info")
-    ngrok_conf = conf.PyngrokConfig(
-        config_path="/usr/src/app/ngrok.yml",
-        auth_token=auth_token,
-        region="in",
-        max_logs=5,
-        ngrok_version="v3",
-        monitor_thread=False)
-    try:
-        conf.set_default(ngrok_conf)
-        file_tunnel = ngrok.connect(addr=f"file://{DOWNLOAD_DIR}", proto="http", schemes=["https"], name="files_tunnel", inspect=False)
-        LOGGER.info(f"Ngrok tunnel started: {file_tunnel.public_url}")
-    except ngrok.PyngrokError as err:
-        LOGGER.error(f"Failed to start ngrok, error: {str(err)}")
 
 @new_task
 async def restart_sessions_confirm(_, query):
