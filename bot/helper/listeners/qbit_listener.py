@@ -20,13 +20,12 @@ from ..mirror_leech_utils.status_utils.qbit_status import QbittorrentStatus
 from ..telegram_helper.message_utils import update_status_message
 
 
-async def _remove_torrent(hash_, tag):
-    pass
-    # await TorrentManager.qbittorrent.torrents.delete([hash_], True)
-    # async with qb_listener_lock:
-    #     if tag in qb_torrents:
-    #         del qb_torrents[tag]
-    # await TorrentManager.qbittorrent.torrents.delete_tags([tag])
+async def _remove_torrent(hash_, tag, delete_file: bool = True):
+    await TorrentManager.qbittorrent.torrents.delete([hash_], delete_file)
+    async with qb_listener_lock:
+        if tag in qb_torrents:
+            del qb_torrents[tag]
+    await TorrentManager.qbittorrent.torrents.delete_tags([tag])
 
 
 @new_task
@@ -47,7 +46,7 @@ async def _on_seed_finish(tor):
     if task := await get_task_by_gid(ext_hash[:12]):
         msg = f"Seeding stopped with Ratio: {round(tor.ratio, 3)} and Time: {get_readable_time(int(tor.seeding_time.total_seconds()))}"
         await task.listener.on_upload_error(msg)
-    await _remove_torrent(ext_hash, tor.tags[0])
+    await _remove_torrent(ext_hash, tor.tags[0], False)
 
 
 @new_task
@@ -59,7 +58,7 @@ async def _stop_duplicate(tor):
             ]
             msg, button = await stop_duplicate_check(task.listener)
             if msg:
-                _on_download_error(msg, tor, button)
+                await _on_download_error(msg, tor, button)
 
 
 @new_task
@@ -92,7 +91,7 @@ async def _on_download_complete(tor):
                 else:
                     removed = True
             if removed:
-                await _remove_torrent(ext_hash, tag)
+                await _remove_torrent(ext_hash, tag, False)
                 return
             async with qb_listener_lock:
                 if tag in qb_torrents:
@@ -102,9 +101,9 @@ async def _on_download_complete(tor):
             await update_status_message(task.listener.message.chat.id)
             LOGGER.info(f"Seeding started: {tor.name} - Hash: {ext_hash}")
         else:
-            await _remove_torrent(ext_hash, tag)
+            await _remove_torrent(ext_hash, tag, False)
     else:
-        await _remove_torrent(ext_hash, tag)
+        await _remove_torrent(ext_hash, tag, False)
 
 
 @new_task
