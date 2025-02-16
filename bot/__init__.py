@@ -14,7 +14,6 @@ from logging import (
 )
 from sabnzbdapi import SabnzbdClient
 from time import time
-from tzlocal import get_localzone
 from os import cpu_count, makedirs, path as ospath
 from requests import get as RequestsGet, exceptions as RequestsExceptions
 
@@ -116,4 +115,4 @@ def download_cookie_file(cookie_file_url):
                 LOGGER.warning("Failed to get cookie file data")
             cookie_file.close()
 
-scheduler = AsyncIOScheduler(timezone=str(get_localzone()), event_loop=bot_loop)
+scheduler = AsyncIOScheduler(event_loop=bot_loop)
