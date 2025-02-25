@@ -1,13 +1,40 @@
 from aioaria2 import Aria2WebsocketClient, exceptions
 from aioqbt.client import create_client
 from aioqbt.client import APIClient
-from asyncio import gather
+from asyncio import gather, TimeoutError
+from aiohttp import ClientError
 from pathlib import Path
+from inspect import iscoroutinefunction
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 from urllib3.exceptions import HTTPError
 from requests import exceptions as RequestsExceptions
 from .. import LOGGER, aria2_options, is_empty_or_blank
 from .config_manager import Config
 from aiohttp.client_exceptions import ClientConnectionError
+
+def wrap_with_retry(obj, max_retries=3):
+    for attr_name in dir(obj):
+        if attr_name.startswith("_"):
+            continue
+
+        attr = getattr(obj, attr_name)
+        if iscoroutinefunction(attr):
+            retry_policy = retry(
+                stop=stop_after_attempt(max_retries),
+                wait=wait_exponential(multiplier=1, min=1, max=5),
+                retry=retry_if_exception_type(
+                    (ClientError, TimeoutError, RuntimeError)
+                ),
+            )
+            wrapped = retry_policy(attr)
+            setattr(obj, attr_name, wrapped)
+    return obj
+
 
 class TorrentManager:
     aria2:Aria2WebsocketClient = None
