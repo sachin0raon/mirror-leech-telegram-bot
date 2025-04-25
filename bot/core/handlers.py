@@ -321,6 +321,13 @@ def add_handlers():
     )
     TgClient.bot.add_handler(
         MessageHandler(
+            hydra_search,
+            filters=command(BotCommands.NzbSearchCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
             ngrok_info,
             filters=command(BotCommands.NgrokCommand) & CustomFilters.authorized
         )
