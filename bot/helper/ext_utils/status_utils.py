@@ -203,29 +203,30 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             else:
                 subsize = ""
                 count = ""
-            msg += f"\n<b>Processed:</b> {task.processed_bytes()}{subsize}"
+            msg += f"\n<b>Processed:</b> <code>{task.processed_bytes()}{subsize}</code>"
             if count:
-                msg += f"\n<b>Count:</b> {count}"
-            msg += f"\n<b>Size:</b> {task.size()}"
-            msg += f"\n<b>Speed:</b> {task.speed()}"
-            msg += f"\n<b>ETA:</b> {task.eta()}"
+                msg += f"\n<b>Count:</b> <code>{count}</code>"
+            msg += f"\n<b>Size:</b> <code>{task.size()}</code>"
+            msg += f"\n<b>Speed:</b> <code>{task.speed()}</code>"
+            msg += f"\n<b>ETA:</b> <code>{task.eta()}</code>"
             if (
                 tstatus == MirrorStatus.STATUS_DOWNLOAD
                 and task.listener.is_torrent
                 or task.listener.is_qbit
             ):
                 try:
-                    msg += f"\n<b>Seeders:</b> {task.seeders_num()} | <b>Leechers:</b> {task.leechers_num()}"
+                    msg += f"\n<b>Seeders:</b> <code>{task.seeders_num()}</code> | <b>Leechers:</b> <code>{task.leechers_num()}</code>"
                 except:
                     pass
         elif tstatus == MirrorStatus.STATUS_SEED:
-            msg += f"\n<b>Size: </b>{task.size()}"
-            msg += f"\n<b>Speed: </b>{task.seed_speed()}"
-            msg += f"\n<b>Uploaded: </b>{task.uploaded_bytes()}"
-            msg += f"\n<b>Ratio: </b>{task.ratio()}"
-            msg += f" | <b>Time: </b>{task.seeding_time()}"
+            msg += f"\n<b>Size: </b><code>{task.size()}</code>"
+            msg += f"\n<b>Speed: </b><code>{task.seed_speed()}</code>"
+            msg += f"\n<b>Uploaded: </b><code>{task.uploaded_bytes()}</code>"
+            msg += f"\n<b>Ratio: </b><code>{task.ratio()}</code>"
+            msg += f" | <b>Time: </b><code>{task.seeding_time()}</code>"
         else:
-            msg += f"\n<b>Size: </b>{task.size()}"
+            msg += f"\n<b>Size: </b><code>{task.size()}</code>"
+        msg += f"\n<b>Elapsed Time:</b> <code>{get_readable_time(time() - task.listener.download_start_time)}</code>"
         msg += f"\n<b>Gid: </b><code>{task.gid()}</code>\n\n"
 
     if len(msg) == 0:
@@ -271,7 +272,7 @@ async def get_cpu_temp() -> str:
         try:
             cmd_result = await cmd_exec(["cat", "/sys/class/thermal/thermal_zone0/temp"])
             if cmd_result[2] == 0:
-                cpu_temp = f"{int(cmd_result[0].strip())/100}°C"
+                cpu_temp = f"{round(int(cmd_result[0].strip())/100, 1)}°C"
         except (FileNotFoundError, IndexError, ValueError):
             pass
     cpu_temp = "NA" if cpu_temp is None else cpu_temp
