@@ -281,9 +281,9 @@ Fill up rest of the fields. Meaning of each field is discussed below.
 
 - `CMD_SUFFIX` (`Str`|`Int`): Commands index number. This number will added at the end all commands.
 
-- `AUTHORIZED_CHATS` (`Str`): Fill user_id and chat_id of groups/users you want to authorize. To auth only specific topic(s) write it in this format `chat_id|thread_id` Ex:-100XXXXXXXXXXX or -100XXXXXXXXXXX|10 or -100XXXXXXXXXXX|10|12. Separate them by space.
+- `AUTHORIZED_CHATS` (`Str`): Fill user_id and chat_id of groups/users you want to authorize. To auth only specific topic(s) write it in this format `chat_id|thread_id` Ex:-100XXXXXXXXXXX or -100XXXXXXXXXXX|10 or -100XXXXXXXXXXX|10|12. Separate them by spaces.
 
-- `SUDO_USERS` (`Str`):  Fill user_id of users whom you want to give sudo permission. Separate them by space.
+- `SUDO_USERS` (`Str`):  Fill user_id of users whom you want to give sudo permission. Separate them by spaces.
 
 - `UPLOAD_PATHS` (`Dict`): Send Dict of keys that have path values. Example: {"path 1": "remote:rclonefolder", "path 2": "gdrive1 id", "path 3": "tg chat id", "path 4": "mrcc:remote:", "path 5": "b: @username"}. 
 
@@ -293,7 +293,7 @@ Fill up rest of the fields. Meaning of each field is discussed below.
 
 - `STATUS_LIMIT` (`Int`): Limit the no. of tasks shown in status message with buttons. Default is `4`. **NOTE**: Recommended limit is `4` tasks.
 
-- `EXCLUDED_EXTENSIONS` (`Str`): File extensions that won't upload/clone. Separate them by space.
+- `EXCLUDED_EXTENSIONS` (`Str`): File extensions that won't upload/clone. Separate them by spaces.
 
 - `INCOMPLETE_TASK_NOTIFIER` (`Bool`): Get incomplete task messages after restart. Require database and superGroup. Default
 is `False`.
@@ -312,7 +312,7 @@ options [HERE](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/YoutubeDL.py#
 see [Using Service Accounts](https://github.com/anasty17/mirror-leech-telegram-bot#generate-service-accounts-what-is-service-account) section below. Default is `False`.
 
 - `FFMPEG_CMDS` (`Dict`): Dict of list values of ffmpeg commands. You can set multiple ffmpeg commands for all files before upload. Don't write ffmpeg at beginning, start directly with the arguments. `Dict`
-  - Examples: {"subtitle": ["-i mltb.mkv -c copy -c:s srt mltb.mkv", "-i mltb.video -c copy -c:s srt mltb"], "convert": ["-i mltb.m4a -c:a libmp3lame -q:a 2 mltb.mp3", "-i mltb.audio -c:a libmp3lame -q:a 2 mltb.mp3"], extract: ["-i mltb -map 0:a -c copy mltb.mka -map 0:s -c copy mltb.srt"], "metadata": ["-i mltb.mkv -map 0 -map -0:v:1 -map -0:s -map 0:s:0 -map -0:v:m:attachment -c copy -metadata:s:v:0 title={title} -metadata:s:a:0 title={title} -metadata:s:a:1 title={title2} -metadata:s:a:2 title={title2} -c:s srt -metadata:s:s:0 title={title3} mltb -y -del"]}
+  - Examples: {"subtitle": ["-i mltb.mkv -c copy -c:s srt mltb.mkv", "-i mltb.video -c copy -c:s srt mltb"], "convert": ["-i mltb.m4a -c:a libmp3lame -q:a 2 mltb.mp3", "-i mltb.audio -c:a libmp3lame -q:a 2 mltb.mp3"], extract: ["-i mltb -map 0:a -c copy mltb.mka -map 0:s -c copy mltb.srt"], "metadata": ["-i mltb.mkv -map 0 -map -0:v:1 -map -0:s -map 0:s:0 -map -0:v:m:attachment -c copy -metadata:s:v:0 title={title} -metadata:s:a:0 title={title} -metadata:s:a:1 title={title2} -metadata:s:a:2 title={title2} -c:s srt -metadata:s:s:0 title={title3} mltb -y -del"], "watermark": ["-i mltb -i tg://openmessage?user_id=5272663208&message_id=322801 -filter_complex 'overlay=W-w-10:H-h-10' -c:a copy mltb"]}
   **Notes**:
   - Don't add ffmpeg at the beginning!
   - Add `-del` to the list which you want from the bot to delete the original files after command run complete!
@@ -324,6 +324,7 @@ see [Using Service Accounts](https://github.com/anasty17/mirror-leech-telegram-b
   3. Third cmd: the input in mltb.m4a so this cmd will work only on m4a audios and the output is mltb.mp3 so the output extension is mp3.
   4. Fourth cmd: the input is mltb.audio so this cmd will work on all audios and the output is mltb.mp3 so the output extension is mp3.
   5. FFmpeg Variables in last cmd which is metadata ({title}, {title2}, etc...), you can edit them in usetting
+  6. Telegram link for small size inputs like photo to set watermark.
 
 - `NAME_SUBSTITUTE` (`Str`): Add word/letter/character/sentense/pattern to remove or replace with other words with sensitive case or without. 
   **Notes**:
@@ -639,17 +640,17 @@ help - All cmds with description
 - Windows users should install python3 and pip. You can find how to install and use them from google or from
   this [telegraph](https://telegra.ph/Create-Telegram-Mirror-Leech-Bot-by-Deploying-App-with-Heroku-Branch-using-Github-Workflow-12-06)
   from [Wiszky](https://github.com/vishnoe115) tutorial.
-- You can ONLY open the generated link from `generate_drive_token.py` in local browser.
+- You can ONLY open the generated link from `generate_drive_token.py` in a local browser.
 
 1. Visit the [Google Cloud Console](https://console.developers.google.com/apis/credentials)
 2. Go to the OAuth Consent tab, fill it, and save.
 3. Go to the Credentials tab and click Create Credentials -> OAuth Client ID
 4. Choose Desktop and Create.
-5. Publish your OAuth consent screen App to prevent **token.pickle** from expire
+5. Publish your OAuth consent screen App to prevent **token.pickle** from expiring.
 6. Use the download button to download your credentials.
 7. Move that file to the root of mirrorbot, and rename it to **credentials.json**
 8. Visit [Google API page](https://console.developers.google.com/apis/library)
-9. Search for Google Drive Api and enable it
+9. Search for Google Drive API and enable it
 10. Finally, run the script to generate **token.pickle** file for Google Drive:
 
 ```
@@ -666,7 +667,7 @@ python3 generate_drive_token.py
 
 1. Install rclone from [Official Site](https://rclone.org/install/)
 2. Create new remote(s) using `rclone config` command.
-3. Copy rclone.conf from .config/rclone/rclone.conf to repo folder
+3. Copy rclone.conf from your system’s config directory into the repo root. For example:
 
 ------
 
@@ -685,8 +686,7 @@ python3 generate_drive_token.py
 - If rclone.conf uploaded from usetting or added in `rclone/{user_id}.conf` then `RCLONE_PATH` must start with `mrcc:`.
 - Whenever you want to write path manually to use user rclone.conf that added from usetting then you must add
   the `mrcc:` at the beginning.
-- So in short, up: has 4 possible values which is: gd(Upload to GDRIVE_ID), rc(Upload to RCLONE_PATH), rcl(Select Rclone
-  Path) and rclone_path(remote:path(owner rclone.conf) or mrcc:remote:path(user rclone.conf))
+- So in short, up: has 4 possible values which are: `gd` (Upload to GDRIVE_ID), `rc` (Upload to RCLONE_PATH), `rcl` (Select Rclone Path) and `rclone_path` (remote:path (owner rclone.conf) or `mrcc`:remote:path (user rclone.conf))
 
 ------
 
@@ -697,13 +697,13 @@ python3 generate_drive_token.py
 
 - `UPSTREAM_REPO` variable can be used for edit/add any file in repository.
 - You can add private/public repository link to grab/overwrite all files from it.
-- You can skip adding the privates files like token.pickle or accounts folder before deploying, simply
+- You can skip adding the private files like token.pickle or accounts folder before deploying, simply
   fill `UPSTREAM_REPO` private one incase you want to grab all files including private files.
 - If you added private files while deploying and you have added private `UPSTREAM_REPO` and your private files in this
   private repository, so your private files will be overwritten from this repository. Also if you are using database for
   private files, then all files from database will override the private files that added before deploying or from
   private `UPSTREAM_REPO`.
-- If you filled `UPSTREAM_REPO` with the official repository link, then be careful incase any change in
+- If you filled `UPSTREAM_REPO` with the official repository link, then be careful in case any change in
   requirements.txt your bot will not start after restart. In this case you need to deploy again with updated code to
   install the new requirements or simply by changing the `UPSTREAM_REPO` to you fork link with that old updates.
 - In case you you filled `UPSTREAM_REPO` with your fork link be careful also if you fetched the commits from the
