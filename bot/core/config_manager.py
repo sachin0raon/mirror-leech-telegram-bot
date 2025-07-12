@@ -84,7 +84,6 @@ class Config:
     QBIT_USER = ""
     QBIT_PASS = ""
 
-
     @classmethod
     def _convert(cls, key, value):
         expected_type = type(getattr(cls, key))
@@ -101,6 +100,9 @@ class Config:
                 raise TypeError(
                     f"{key} should be {expected_type.__name__}, got {type(value).__name__}"
                 )
+
+            if not value:
+                return expected_type()
 
             try:
                 evaluated = literal_eval(value)
