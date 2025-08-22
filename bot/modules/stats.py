@@ -12,7 +12,7 @@ from psutil import (
     boot_time,
 )
 
-from .. import bot_start_time
+from .. import bot_start_time, DOWNLOAD_DIR
 from ..helper.ext_utils.status_utils import get_readable_file_size, get_readable_time, get_cpu_temp
 from ..helper.ext_utils.bot_utils import cmd_exec, new_task
 from ..helper.telegram_helper.message_utils import send_message
@@ -31,7 +31,7 @@ commands = {
 
 @new_task
 async def bot_stats(_, message):
-    total, used, free, disk = disk_usage("/")
+    total, used, free, disk = disk_usage(DOWNLOAD_DIR)
     swap = swap_memory()
     memory = virtual_memory()
     stats = f"""
