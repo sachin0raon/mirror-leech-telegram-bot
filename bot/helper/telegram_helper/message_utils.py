@@ -5,7 +5,7 @@ from time import time
 
 from ... import LOGGER, status_dict, task_dict_lock, intervals, DOWNLOAD_DIR
 from ...core.config_manager import Config
-from ...core.mltb_client import TgClient
+from ...core.telegram_manager import TgClient
 from ..ext_utils.bot_utils import SetInterval
 from ..ext_utils.exceptions import TgLinkException
 from ..ext_utils.status_utils import get_readable_message
@@ -15,8 +15,6 @@ async def send_message(message, text, buttons=None, block=True):
     try:
         return await message.reply(
             text=text,
-            quote=True,
-            disable_web_page_preview=True,
             disable_notification=True,
             reply_markup=buttons,
         )
@@ -39,7 +37,6 @@ async def edit_message(message, text, buttons=None, block=True):
     try:
         return await message.edit(
             text=text,
-            disable_web_page_preview=True,
             reply_markup=buttons,
         )
     except FloodWait as f:
@@ -60,7 +57,7 @@ async def edit_message(message, text, buttons=None, block=True):
 async def send_file(message, file, caption=""):
     try:
         return await message.reply_document(
-            document=file, quote=True, caption=caption, disable_notification=True
+            document=file, caption=caption, disable_notification=True
         )
     except FloodWait as f:
         LOGGER.warning(str(f))
@@ -77,7 +74,6 @@ async def send_rss(text, chat_id, thread_id):
         return await app.send_message(
             chat_id=chat_id,
             text=text,
-            disable_web_page_preview=True,
             message_thread_id=thread_id,
             disable_notification=True,
         )

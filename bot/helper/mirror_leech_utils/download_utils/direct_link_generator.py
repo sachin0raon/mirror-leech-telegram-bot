@@ -49,6 +49,8 @@ def direct_link_generator(link):
         return osdn(link)
     elif "github.com" in domain:
         return github(link)
+    elif "transfer.it" in domain:
+        return transfer_it(link)
     elif "hxfile.co" in domain:
         return hxfile(link)
     elif "1drv.ms" in domain:
@@ -227,6 +229,13 @@ def get_captcha_token(session, params):
     res = session.post(f"{recaptcha_api}/reload", params=params)
     if token := findall(r'"rresp","(.*?)"', res.text):
         return token[0]
+
+def transfer_it(url):
+    resp = post('https://transfer-it-henna.vercel.app/post',json={'url': url})
+    if resp.status_code == 200:
+        return resp.json()['url']
+    else:
+        raise DirectDownloadLinkException("ERROR: File Expired or File Not Found")
 
 
 def buzzheavier(url):
@@ -870,7 +879,7 @@ def sharer_scraper(url):
         raise DirectDownloadLinkException(f"ERROR: {e.__class__.__name__}") from e
     if "url" not in res:
         raise DirectDownloadLinkException(
-            "ERROR: Drive Link not found, Try in your broswer"
+            "ERROR: Drive Link not found, Try in your browser"
         )
     if "drive.google.com" in res["url"] or "drive.usercontent.google.com" in res["url"]:
         return res["url"]
@@ -885,7 +894,7 @@ def sharer_scraper(url):
         return drive_link[0]
     else:
         raise DirectDownloadLinkException(
-            "ERROR: Drive Link not found, Try in your broswer"
+            "ERROR: Drive Link not found, Try in your browser"
         )
 
 
@@ -1087,13 +1096,14 @@ def gofile(url):
             raise e
 
     def __fetch_links(session, _id, folderPath=""):
-        _url = f"https://api.gofile.io/contents/{_id}?wt=4fd6sg89d7s6&cache=true"
+        _url = f"https://api.gofile.io/contents/{_id}?cache=true"
         headers = {
             "User-Agent": user_agent,
             "Accept-Encoding": "gzip, deflate, br",
             "Accept": "*/*",
             "Connection": "keep-alive",
             "Authorization": "Bearer" + " " + token,
+            "X-Website-Token" : "4fd6sg89d7s6"
         }
         if _password:
             _url += f"&password={_password}"
@@ -1150,7 +1160,7 @@ def gofile(url):
             token = __get_token(session)
         except Exception as e:
             raise DirectDownloadLinkException(f"ERROR: {e.__class__.__name__}")
-        details["header"] = [f"Cookie: accountToken={token}"]
+        details["header"] = f"Cookie: accountToken={token}"
         try:
             __fetch_links(session, _id)
         except Exception as e:
@@ -1159,7 +1169,6 @@ def gofile(url):
     if len(details["contents"]) == 1:
         return (details["contents"][0]["url"], details["header"])
     return details
-
 
 def mediafireFolder(url):
     if "::" in url:

@@ -25,8 +25,9 @@ from tenacity import (
     RetryError,
 )
 
+from ... import intervals
 from ...core.config_manager import Config
-from ...core.mltb_client import TgClient
+from ...core.telegram_manager import TgClient
 from ..ext_utils.bot_utils import sync_to_async
 from ..ext_utils.files_utils import is_archive, get_base_name
 from ..telegram_helper.message_utils import delete_message
@@ -99,7 +100,6 @@ class TelegramUploader:
                     self._sent_msg = await TgClient.user.send_message(
                         chat_id=self._listener.up_dest,
                         text=msg,
-                        disable_web_page_preview=True,
                         message_thread_id=self._listener.chat_thread_id,
                         disable_notification=True,
                     )
@@ -107,7 +107,6 @@ class TelegramUploader:
                     self._sent_msg = await self._listener.client.send_message(
                         chat_id=self._listener.up_dest,
                         text=msg,
-                        disable_web_page_preview=True,
                         message_thread_id=self._listener.chat_thread_id,
                         disable_notification=True,
                     )
@@ -123,7 +122,6 @@ class TelegramUploader:
                 self._sent_msg = await TgClient.user.send_message(
                     chat_id=self._listener.message.chat.id,
                     text="Deleted Cmd Message! Don't delete the cmd message again!",
-                    disable_web_page_preview=True,
                     disable_notification=True,
                 )
         else:
@@ -184,7 +182,6 @@ class TelegramUploader:
             self._sent_msg = (
                 await self._sent_msg.reply_media_group(
                     media=batch,
-                    quote=True,
                     disable_notification=True,
                 )
             )[-1]
@@ -201,7 +198,6 @@ class TelegramUploader:
                 )
         msgs_list = await msgs[0].reply_to_message.reply_media_group(
             media=self._get_input_media(subkey, key),
-            quote=True,
             disable_notification=True,
         )
         for msg in msgs:
@@ -230,6 +226,8 @@ class TelegramUploader:
                 self._error = ""
                 self._up_path = f_path = ospath.join(dirpath, file_)
                 if not await aiopath.exists(self._up_path):
+                    if intervals["stopAll"]:
+                        return
                     LOGGER.error(f"{self._up_path} not exists! Continue uploading!")
                     continue
                 try:
@@ -306,7 +304,7 @@ class TelegramUploader:
             return
         if self._total_files == 0:
             await self._listener.on_upload_error(
-                "No files to upload. In case you have filled EXCLUDED_EXTENSIONS, then check if all files have those extensions or not."
+                "No files to upload. In case you have filled EXCLUDED/INCLUDED EXTENSIONS, then check if all files have those extensions or not."
             )
             return
         if self._total_files <= self._corrupted:
@@ -342,6 +340,8 @@ class TelegramUploader:
                 thumb_path = f"{self._path}/yt-dlp-thumb/{file_name}.jpg"
                 if await aiopath.isfile(thumb_path):
                     thumb = thumb_path
+                elif await aiopath.isfile(thumb_path.replace("/yt-dlp-thumb", "")):
+                    thumb = thumb_path.replace("/yt-dlp-thumb", "")
                 elif is_audio and not is_video:
                     thumb = await get_audio_thumbnail(self._up_path)
 
@@ -360,7 +360,6 @@ class TelegramUploader:
                     thumb = None
                 self._sent_msg = await self._sent_msg.reply_document(
                     document=self._up_path,
-                    quote=True,
                     thumb=thumb,
                     caption=cap_mono,
                     force_document=True,
@@ -390,7 +389,6 @@ class TelegramUploader:
                     thumb = None
                 self._sent_msg = await self._sent_msg.reply_video(
                     video=self._up_path,
-                    quote=True,
                     caption=cap_mono,
                     duration=duration,
                     width=width,
@@ -409,7 +407,6 @@ class TelegramUploader:
                     thumb = None
                 self._sent_msg = await self._sent_msg.reply_audio(
                     audio=self._up_path,
-                    quote=True,
                     caption=cap_mono,
                     duration=duration,
                     performer=artist,
@@ -424,7 +421,6 @@ class TelegramUploader:
                     return
                 self._sent_msg = await self._sent_msg.reply_photo(
                     photo=self._up_path,
-                    quote=True,
                     caption=cap_mono,
                     disable_notification=True,
                     progress=self._upload_progress,
