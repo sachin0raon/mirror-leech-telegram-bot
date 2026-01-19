@@ -97,7 +97,7 @@ def download_token_file(token_file_url: str):
             LOGGER.error("Failed to download token.pickle file")
         else:
             if pickle_file.ok:
-                with open("/usr/src/app/token.pickle", 'wb') as f:
+                with open("/app/token.pickle", 'wb') as f:
                     f.write(pickle_file.content)
             else:
                 LOGGER.warning("Failed to get pickle file data")
@@ -112,7 +112,7 @@ def download_cookie_file(cookie_file_url):
             LOGGER.error("Failed to download cookie file")
         else:
             if cookie_file.ok:
-                with open("/usr/src/app/cookies.txt", 'wt', encoding='utf-8') as f:
+                with open("/app/cookies.txt", 'wt', encoding='utf-8') as f:
                     f.write(cookie_file.text)
             else:
                 LOGGER.warning("Failed to get cookie file data")

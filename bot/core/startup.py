@@ -286,10 +286,10 @@ async def load_configurations():
 @new_task
 async def start_ngrok(auth_token: str, download_dir: str) -> None:
     LOGGER.info("Starting ngrok tunnel")
-    with open("/usr/src/app/ngrok.yml", "w") as config:
+    with open("/app/ngrok.yml", "w") as config:
         config.write(f"version: 2\nauthtoken: {auth_token}\nregion: in\nconsole_ui: false\nlog_level: info")
     ngrok_conf = conf.PyngrokConfig(
-        config_path="/usr/src/app/ngrok.yml",
+        config_path="/app/ngrok.yml",
         auth_token=auth_token,
         region="in",
         max_logs=5,

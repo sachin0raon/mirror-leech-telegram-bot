@@ -42,7 +42,7 @@ if CONFIG_FILE_URL is not None:
         exit(1)
     else:
         if config_file.ok:
-            with open('/usr/src/app/config.py', 'wt', encoding='utf-8') as f:
+            with open('/app/config.py', 'wt', encoding='utf-8') as f:
                 f.write(config_file.text)
         else:
             log_error("Failed to get config.py file data")
