@@ -33,6 +33,7 @@ from .stats import bot_stats, get_packages_version
 from .status import task_status, status_pages
 from .users_settings import get_users_settings, edit_user_settings, send_user_settings
 from .ytdlp import ytdl, ytdl_leech
+from .gallery_dl import gallery_dl, gallery_dl_leech
 from .ngrok_info import ngrok_info
 
 __all__ = [
@@ -89,5 +90,7 @@ __all__ = [
     "send_user_settings",
     "ytdl",
     "ytdl_leech",
+    "gallery_dl",
+    "gallery_dl_leech",
     "ngrok_info",
 ]
