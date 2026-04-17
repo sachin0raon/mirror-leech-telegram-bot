@@ -3,7 +3,14 @@ from asyncio import sleep, TimeoutError
 from time import time
 from aiohttp.client_exceptions import ClientError
 
-from ... import task_dict_lock, task_dict, LOGGER, intervals
+from ... import (
+    task_dict_lock,
+    task_dict,
+    LOGGER,
+    intervals,
+    external_aria2_downloads,
+    external_listener_lock,
+)
 from ...core.config_manager import Config
 from ...core.torrent_manager import TorrentManager, is_metadata, aria2_name
 from ..ext_utils.bot_utils import bt_selection_buttons
@@ -11,11 +18,59 @@ from ..ext_utils.files_utils import clean_unwanted
 from ..ext_utils.status_utils import get_task_by_gid
 from ..ext_utils.task_manager import stop_duplicate_check
 from ..mirror_leech_utils.status_utils.aria2_status import Aria2Status
+from ..mirror_leech_utils.status_utils.external_aria2_status import ExternalAria2Status
 from ..telegram_helper.message_utils import (
     send_message,
     delete_message,
     update_status_message,
 )
+
+
+# ---------------------------------------------------------------------------
+# External download helpers
+# ---------------------------------------------------------------------------
+
+async def _register_external_aria2(gid: str, download: dict):
+    """Register an aria2 download not started by the bot into task_dict so it
+    appears in /status output and can be cancelled via /cancel <gid>."""
+    task_key = f"exta2_{gid[:8]}"
+
+    async with external_listener_lock:
+        if gid in external_aria2_downloads:
+            return   # already registered
+
+        name = aria2_name(download) or gid
+        LOGGER.info(f"Detected external aria2 download: '{name}' (GID: {gid})")
+
+        # Inject bot trackers if this is a BitTorrent download
+        if "bittorrent" in download and Config.BT_TRACKERS_ARIA:
+            try:
+                await TorrentManager.aria2.changeOption(
+                    gid, {"bt-tracker": Config.BT_TRACKERS_ARIA}
+                )
+                LOGGER.info(
+                    f"Added trackers to external aria2 download: '{name}'"
+                )
+            except Exception as e:
+                LOGGER.warning(
+                    f"Failed to add trackers to external aria2 download '{name}': {e}"
+                )
+
+        status = ExternalAria2Status(gid, download, task_key)
+        external_aria2_downloads[gid] = status
+        async with task_dict_lock:
+            task_dict[task_key] = status
+
+
+async def _remove_external_aria2(gid: str):
+    """Clean up after an externally tracked aria2 download finishes or errors."""
+    async with external_listener_lock:
+        status = external_aria2_downloads.pop(gid, None)
+    if status is not None:
+        async with task_dict_lock:
+            if status._task_key in task_dict:
+                del task_dict[status._task_key]
+        LOGGER.info(f"Removed external aria2 download from tracking (GID: {gid})")
 
 
 async def _on_download_started(api, data):
@@ -40,6 +95,9 @@ async def _on_download_started(api, data):
                         await delete_message(meta)
                         break
                     download = await api.tellStatus(gid)
+        else:
+            # External metadata download — register it
+            await _register_external_aria2(gid, download)
         return
     else:
         LOGGER.info(f"onDownloadStarted: {aria2_name(download)} - Gid: {gid}")
@@ -55,6 +113,10 @@ async def _on_download_started(api, data):
         if msg:
             await TorrentManager.aria2_remove(download)
             await task.listener.on_download_error(msg, button)
+    else:
+        # External download (HTTP/FTP/magnet that already resolved) — register it
+        download = await api.tellStatus(gid)
+        await _register_external_aria2(gid, download)
 
 
 async def _on_download_complete(api, data):
@@ -78,6 +140,17 @@ async def _on_download_complete(api, data):
                 SBUTTONS = bt_selection_buttons(new_gid)
                 msg = "Your download paused. Choose files then press Done Selecting button to start downloading."
                 await send_message(task.listener.message, msg, SBUTTONS)
+        else:
+            # External magnet resolved — the GID transition is handled by
+            # ExternalAria2Status._refresh() on next update(). Just register
+            # the new torrent GID if not already tracked.
+            async with external_listener_lock:
+                is_tracked = gid in external_aria2_downloads
+            if is_tracked:
+                pass  # _refresh() inside the status object handles the key swap
+            else:
+                new_download = await api.tellStatus(new_gid)
+                await _register_external_aria2(new_gid, new_download)
     elif "bittorrent" in download:
         if task := await get_task_by_gid(gid):
             task.listener.is_torrent = True
@@ -89,6 +162,9 @@ async def _on_download_complete(api, data):
                 await task.listener.on_upload_error(
                     f"Seeding stopped with Ratio: {task.ratio()} and Time: {task.seeding_time()}"
                 )
+        else:
+            # External BT download seeding completed — just clean up tracking
+            await _remove_external_aria2(gid)
     else:
         LOGGER.info(f"onDownloadComplete: {aria2_name(download)} - Gid: {gid}")
         if task := await get_task_by_gid(gid):
@@ -96,6 +172,9 @@ async def _on_download_complete(api, data):
             if intervals["stopAll"]:
                 return
             #await TorrentManager.aria2_remove(download)
+        else:
+            # External HTTP/FTP download completed — clean up tracking
+            await _remove_external_aria2(gid)
 
 
 async def _on_bt_download_complete(api, data):
@@ -160,6 +239,9 @@ async def _on_bt_download_complete(api, data):
             await update_status_message(task.listener.message.chat.id)
         #else:
         #    await TorrentManager.aria2_remove(download)
+    else:
+        # External BT download completed — remove from tracking
+        await _remove_external_aria2(gid)
 
 
 async def _on_download_stopped(_, data):
@@ -167,6 +249,9 @@ async def _on_download_stopped(_, data):
     await sleep(4)
     if task := await get_task_by_gid(gid):
         await task.listener.on_download_error("Dead torrent!")
+    else:
+        # External download stopped — clean up tracking
+        await _remove_external_aria2(gid)
 
 
 async def _on_download_error(api, data):
@@ -185,6 +270,10 @@ async def _on_download_error(api, data):
         return
     if task := await get_task_by_gid(gid):
         await task.listener.on_download_error(error)
+    else:
+        # External download errored — clean up tracking
+        LOGGER.warning(f"External aria2 download error (GID: {gid}): {error}")
+        await _remove_external_aria2(gid)
 
 
 def add_aria2_callbacks():
