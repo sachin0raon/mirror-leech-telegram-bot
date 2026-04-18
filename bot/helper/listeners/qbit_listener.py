@@ -123,15 +123,17 @@ async def _handle_external_torrent(tor_info):
     hash_ = tor_info.hash
     task_key = f"extqb_{hash_[:8]}"
 
-    # Skip hashes we have permanently ignored (terminal on first detection)
+    # Skip hashes that finished while being actively tracked.
+    # This prevents the re-detection loop:
+    #   tracked → stopped → removed from dict → re-detected as new → loop
     if hash_ in _ignored_external_hashes:
         return
 
     state = tor_info.state
 
-    # Fast check: already registered or should be cleaned up?
     async with external_listener_lock:
         if hash_ in external_qb_torrents:
+            # Already registered — clean up if it has stopped/finished
             if state in ["stoppedUP", "stoppedDL", "error", "missingFiles"]:
                 LOGGER.info(
                     f"External qBittorrent torrent finished/stopped: "
@@ -141,17 +143,18 @@ async def _handle_external_torrent(tor_info):
                 async with task_dict_lock:
                     if task_key in task_dict:
                         del task_dict[task_key]
+                # Permanently ignore so we don't re-detect and re-delete in a loop
                 _ignored_external_hashes.add(hash_)
             return
 
-        # Skip registration for torrents already in a terminal/stopped state
-        # when first detected — avoids the detect→cleanup→detect loop.
+        # Skip registration for torrents in a terminal state on first detection.
+        # Do NOT add to _ignored_external_hashes here — the torrent may be
+        # resumed later, in which case the next poll cycle will register it.
         if state in ["stoppedUP", "stoppedDL", "error", "missingFiles", "checkingResumeData"]:
             LOGGER.debug(
-                f"Ignoring external torrent in terminal state '{state}': "
+                f"Skipping external torrent in terminal state '{state}': "
                 f"{tor_info.name} ({hash_})"
             )
-            _ignored_external_hashes.add(hash_)
             return
 
         # Mark as registered immediately so concurrent poll cycles don't double-register
@@ -181,6 +184,7 @@ async def _handle_external_torrent(tor_info):
         external_qb_torrents[hash_] = status
     async with task_dict_lock:
         task_dict[task_key] = status
+
 
 
 @new_task

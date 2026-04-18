@@ -155,18 +155,20 @@ async def _on_download_started(api, data):
         LOGGER.info(f"onDownloadStarted: {gid} METADATA")
         await sleep(1)
         if task := await get_task_by_gid(gid):
-            task.listener.is_torrent = True
-            if task.listener.select:
-                metamsg = "Downloading Metadata, wait then you can select files. Use torrent file to avoid this wait."
-                meta = await send_message(task.listener.message, metamsg)
-                while True:
-                    await sleep(0.5)
-                    if download.get("status", "") == "removed" or download.get(
-                        "followedBy", []
-                    ):
-                        await delete_message(meta)
-                        break
-                    download = await api.tellStatus(gid)
+            # Skip bot-managed handling if this is already an external task
+            if not isinstance(task, ExternalAria2Status):
+                task.listener.is_torrent = True
+                if task.listener.select:
+                    metamsg = "Downloading Metadata, wait then you can select files. Use torrent file to avoid this wait."
+                    meta = await send_message(task.listener.message, metamsg)
+                    while True:
+                        await sleep(0.5)
+                        if download.get("status", "") == "removed" or download.get(
+                            "followedBy", []
+                        ):
+                            await delete_message(meta)
+                            break
+                        download = await api.tellStatus(gid)
         else:
             # External metadata download — register it
             await _register_external_aria2(gid, download)
@@ -177,11 +179,18 @@ async def _on_download_started(api, data):
 
     await sleep(2)
     if task := await get_task_by_gid(gid):
+        # If this is already an externally-tracked download (e.g. a scan-registered
+        # paused download that was just resumed), skip bot-managed handling entirely.
+        # Running stop_duplicate_check or setting task.listener.name would corrupt
+        # the ExternalAria2Status object (name() method shadowed by instance attr).
+        if isinstance(task, ExternalAria2Status):
+            return
         download = await api.tellStatus(gid)
         if "bittorrent" in download:
             task.listener.is_torrent = True
         task.listener.name = aria2_name(download)
         msg, button = await stop_duplicate_check(task.listener)
+
         if msg:
             await TorrentManager.aria2_remove(download)
             await task.listener.on_download_error(msg, button)
