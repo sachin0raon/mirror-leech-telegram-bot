@@ -233,7 +233,8 @@ async def _on_download_complete(api, data):
                 new_download = await api.tellStatus(new_gid)
                 await _register_external_aria2(new_gid, new_download)
     elif "bittorrent" in download:
-        if task := await get_task_by_gid(gid):
+        task = await get_task_by_gid(gid)
+        if task and not isinstance(task, ExternalAria2Status):
             task.listener.is_torrent = True
             if hasattr(task, "seeding") and task.seeding:
                 LOGGER.info(
@@ -244,17 +245,18 @@ async def _on_download_complete(api, data):
                     f"Seeding stopped with Ratio: {task.ratio()} and Time: {task.seeding_time()}"
                 )
         else:
-            # External BT download seeding completed — just clean up tracking
+            # External BT download seeding completed — user wants it removed from status
             await _remove_external_aria2(gid)
     else:
         LOGGER.info(f"onDownloadComplete: {aria2_name(download)} - Gid: {gid}")
-        if task := await get_task_by_gid(gid):
+        task = await get_task_by_gid(gid)
+        if task and not isinstance(task, ExternalAria2Status):
             await task.listener.on_download_complete()
             if intervals["stopAll"]:
                 return
             #await TorrentManager.aria2_remove(download)
         else:
-            # External HTTP/FTP download completed — clean up tracking
+            # External HTTP/FTP download completed — user wants it removed from status
             await _remove_external_aria2(gid)
 
 
@@ -263,7 +265,8 @@ async def _on_bt_download_complete(api, data):
     await sleep(1)
     download = await api.tellStatus(gid)
     LOGGER.info(f"onBtDownloadComplete: {aria2_name(download)} - Gid: {gid}")
-    if task := await get_task_by_gid(gid):
+    task = await get_task_by_gid(gid)
+    if task and not isinstance(task, ExternalAria2Status):
         task.listener.is_torrent = True
         if task.listener.select:
             res = download.get("files", [])
@@ -321,18 +324,25 @@ async def _on_bt_download_complete(api, data):
         #else:
         #    await TorrentManager.aria2_remove(download)
     else:
-        # External BT download completed — remove from tracking
+        # External BT download completed — user wants it removed from status
         await _remove_external_aria2(gid)
 
 
 async def _on_download_stopped(_, data):
     gid = data["params"][0]["gid"]
     await sleep(4)
-    if task := await get_task_by_gid(gid):
+    task = await get_task_by_gid(gid)
+    if task and not isinstance(task, ExternalAria2Status):
         await task.listener.on_download_error("Dead torrent!")
     else:
-        # External download stopped — clean up tracking
-        await _remove_external_aria2(gid)
+        # External download stopped — check if genuinely removed or just paused
+        try:
+            download = await api.tellStatus(gid)
+            if download.get("status") == "removed":
+                await _remove_external_aria2(gid)
+        except Exception:
+            # If tellStatus throws, it's purged
+            await _remove_external_aria2(gid)
 
 
 async def _on_download_error(api, data):
@@ -349,12 +359,18 @@ async def _on_download_error(api, data):
             return
     except (TimeoutError, ClientError, Exception) as e:
         return
-    if task := await get_task_by_gid(gid):
+    task = await get_task_by_gid(gid)
+    if task and not isinstance(task, ExternalAria2Status):
         await task.listener.on_download_error(error)
     else:
-        # External download errored — clean up tracking
-        LOGGER.warning(f"External aria2 download error (GID: {gid}): {error}")
-        await _remove_external_aria2(gid)
+        # External download errored — check if genuinely removed or just errored
+        try:
+            download = await api.tellStatus(gid)
+            if download.get("status") == "removed":
+                LOGGER.warning(f"External aria2 download error (GID: {gid}): {error}")
+                await _remove_external_aria2(gid)
+        except Exception:
+            await _remove_external_aria2(gid)
 
 
 def add_aria2_callbacks():

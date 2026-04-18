@@ -69,7 +69,12 @@ class ExternalAria2Status:
                         self._task_key = f"exta2_{new_gid[:8]}"
                         self._download = await TorrentManager.aria2.tellStatus(self._gid)
         except Exception as e:
-            LOGGER.error(f"ExternalAria2Status: failed to refresh {self._gid}: {e}")
+            # If tellStatus throws, the download was completely purged from aria2
+            # (e.g. "Clear Stopped" in Web UI). Trigger async cleanup. Spawn as
+            # background task to avoid deadlocking if caller holds task_dict_lock.
+            from .... import bot_loop
+            from ...listeners.aria2_listener import _remove_external_aria2
+            bot_loop.create_task(_remove_external_aria2(self._gid))
 
     # ------------------------------------------------------------------
     # Status interface (mirrors Aria2Status)

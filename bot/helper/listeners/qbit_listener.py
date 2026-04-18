@@ -50,7 +50,7 @@ async def _on_seed_finish(tor):
     ext_hash = tor.hash
     LOGGER.info(f"Cancelling Seed: {tor.name}")
     if task := await get_task_by_gid(ext_hash[:12]):
-        msg = f"Seeding stopped with Ratio: {round(tor.ratio, 3)} and Time: {get_readable_time(int(tor.seeding_time.total_seconds() or "0"))}"
+        msg = f"Seeding stopped with Ratio: {round(tor.ratio, 3)} and Time: {get_readable_time(int(tor.seeding_time.total_seconds() or '0'))}"
         await task.listener.on_upload_error(msg)
     await _remove_torrent(ext_hash, tor.tags[0], False)
 
@@ -112,8 +112,8 @@ async def _on_download_complete(tor):
         await _remove_torrent(ext_hash, tag, False)
 
 
-# Hashes of external torrents that were already in a terminal state on first
-# detection — kept forever so they are never re-registered on subsequent polls.
+# Hashes of external torrents that were fully completed/stopped.
+# Kept so they don't get re-registered into the status message.
 _ignored_external_hashes: set = set()
 
 
@@ -123,38 +123,11 @@ async def _handle_external_torrent(tor_info):
     hash_ = tor_info.hash
     task_key = f"extqb_{hash_[:8]}"
 
-    # Skip hashes that finished while being actively tracked.
-    # This prevents the re-detection loop:
-    #   tracked → stopped → removed from dict → re-detected as new → loop
     if hash_ in _ignored_external_hashes:
         return
 
-    state = tor_info.state
-
     async with external_listener_lock:
         if hash_ in external_qb_torrents:
-            # Already registered — clean up if it has stopped/finished
-            if state in ["stoppedUP", "stoppedDL", "error", "missingFiles"]:
-                LOGGER.info(
-                    f"External qBittorrent torrent finished/stopped: "
-                    f"{tor_info.name} ({hash_})"
-                )
-                del external_qb_torrents[hash_]
-                async with task_dict_lock:
-                    if task_key in task_dict:
-                        del task_dict[task_key]
-                # Permanently ignore so we don't re-detect and re-delete in a loop
-                _ignored_external_hashes.add(hash_)
-            return
-
-        # Skip registration for torrents in a terminal state on first detection.
-        # Do NOT add to _ignored_external_hashes here — the torrent may be
-        # resumed later, in which case the next poll cycle will register it.
-        if state in ["stoppedUP", "stoppedDL", "error", "missingFiles", "checkingResumeData"]:
-            LOGGER.debug(
-                f"Skipping external torrent in terminal state '{state}': "
-                f"{tor_info.name} ({hash_})"
-            )
             return
 
         # Mark as registered immediately so concurrent poll cycles don't double-register
@@ -193,7 +166,9 @@ async def _qb_listener():
         async with qb_listener_lock:
             try:
                 torrents = await TorrentManager.qbittorrent.torrents.info()
+                active_hashes = set()
                 for tor_info in torrents:
+                    active_hashes.add(tor_info.hash)
                     tag = tor_info.tags[0] if tor_info.tags else ""
                     if tag in qb_torrents:
                         # ---- existing bot-managed torrent logic (unchanged) ----
@@ -264,7 +239,37 @@ async def _qb_listener():
                         # Only handle if tag is not a pure-digit bot mid
                         # (guards against race where bot mid isn't in qb_torrents yet)
                         if not tag.isdigit():
-                            await _handle_external_torrent(tor_info)
+                            if tor_info.progress == 1 and tor_info.state == "stoppedUP":
+                                # Completed and stopped external torrent — hide from status forever
+                                if tor_info.hash not in _ignored_external_hashes:
+                                    _ignored_external_hashes.add(tor_info.hash)
+                                    task_key = f"extqb_{tor_info.hash[:8]}"
+                                    async with external_listener_lock:
+                                        if tor_info.hash in external_qb_torrents:
+                                            del external_qb_torrents[tor_info.hash]
+                                    async with task_dict_lock:
+                                        if task_key in task_dict:
+                                            del task_dict[task_key]
+                                    LOGGER.info(f"External qBittorrent torrent completed/stopped, removing from tracking: {tor_info.name}")
+                            else:
+                                await _handle_external_torrent(tor_info)
+
+                # Check for external torrents that were deleted from qBittorrent
+                to_remove = []
+                async with external_listener_lock:
+                    for hash_ in list(external_qb_torrents.keys()):
+                        if hash_ not in active_hashes:
+                            to_remove.append(hash_)
+                            del external_qb_torrents[hash_]
+
+                if to_remove:
+                    async with task_dict_lock:
+                        for hash_ in to_remove:
+                            task_key = f"extqb_{hash_[:8]}"
+                            if task_key in task_dict:
+                                del task_dict[task_key]
+                            LOGGER.info(f"External qBittorrent torrent removed from client tracking: {hash_}")
+
             except (ClientError, TimeoutError, Exception, AQError) as e:
                 LOGGER.error(str(e))
         await sleep(3)
