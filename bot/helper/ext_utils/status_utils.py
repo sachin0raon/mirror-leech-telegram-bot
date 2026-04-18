@@ -193,7 +193,7 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             msg += f"\n<i>{task.listener.subname}</i>"
         if (
             tstatus not in [MirrorStatus.STATUS_SEED, MirrorStatus.STATUS_QUEUEUP]
-            and task.listener.progress
+            and getattr(task.listener, "progress", getattr(task.listener, "show_progress", True))
         ):
             progress = task.progress()
             msg += f"\n{get_progress_bar_string(progress)} {progress}"

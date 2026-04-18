@@ -26,7 +26,7 @@ class ExternalAria2Status:
         self.download_start_time = time()
         self.seeding = False
         self.queued = False
-        self.start_time = 0
+        self.start_time = time()           # initialised to now so seeding_time() is meaningful
         self.tool = "aria2"
 
         # --- self-referential listener fields expected by the status pipeline ---
@@ -36,8 +36,9 @@ class ExternalAria2Status:
         self.is_qbit = False
         self.is_torrent = True
         self.is_cancelled = False
+        self.mid = task_key                # used by any code referencing listener.mid
         self.subname = ""
-        self.progress = True
+        self.show_progress = True          # flag read as task.listener.progress in status rendering
         self.subsize = 0
         self.files_to_proceed = []
         self.proceed_count = 0

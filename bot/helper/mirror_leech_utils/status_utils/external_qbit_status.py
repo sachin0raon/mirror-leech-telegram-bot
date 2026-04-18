@@ -32,8 +32,9 @@ class ExternalQbitStatus:
         self.is_qbit = True
         self.is_torrent = True
         self.is_cancelled = False
+        self.seeding = False               # needed so get_task_by_gid calls update()
         self.subname = ""
-        self.progress = True
+        self.show_progress = True          # flag read as task.listener.progress in status rendering
         self.subsize = 0
         self.files_to_proceed = []
         self.proceed_count = 0
@@ -79,7 +80,7 @@ class ExternalQbitStatus:
 
     def eta(self):
         try:
-            return get_readable_time(self._info.eta.total_seconds())
+            return get_readable_time(int(self._info.eta.total_seconds()))
         except Exception:
             return "-"
 

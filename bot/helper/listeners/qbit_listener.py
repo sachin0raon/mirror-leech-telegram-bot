@@ -5,6 +5,7 @@ from aiohttp.client_exceptions import ClientError
 from aioqbt.exc import AQError
 
 from ... import (
+    bot_loop,
     task_dict,
     task_dict_lock,
     intervals,
@@ -117,9 +118,9 @@ async def _handle_external_torrent(tor_info):
     hash_ = tor_info.hash
     task_key = f"extqb_{hash_[:8]}"
 
+    # Fast check: already registered or should be cleaned up?
     async with external_listener_lock:
         if hash_ in external_qb_torrents:
-            # Already registered — check if it finished/was removed
             state = tor_info.state
             if state in ["stoppedUP", "stoppedDL", "error", "missingFiles"]:
                 LOGGER.info(
@@ -131,29 +132,33 @@ async def _handle_external_torrent(tor_info):
                     if task_key in task_dict:
                         del task_dict[task_key]
             return
+        # Mark as registered immediately so concurrent poll cycles don't double-register
+        external_qb_torrents[hash_] = None
 
-        LOGGER.info(
-            f"Detected external qBittorrent torrent: {tor_info.name} ({hash_})"
-        )
-        # Inject bot trackers into the externally added torrent
-        if Config.BT_TRACKERS:
-            try:
-                await TorrentManager.qbittorrent.torrents.add_trackers(
-                    hash=hash_, trackers=Config.BT_TRACKERS
-                )
-                LOGGER.info(
-                    f"Added {len(Config.BT_TRACKERS)} trackers to external torrent: "
-                    f"{tor_info.name}"
-                )
-            except Exception as e:
-                LOGGER.warning(
-                    f"Failed to add trackers to external torrent {tor_info.name}: {e}"
-                )
+    LOGGER.info(f"Detected external qBittorrent torrent: {tor_info.name} ({hash_})")
 
-        status = ExternalQbitStatus(tor_info, task_key)
+    # Inject bot trackers — API call outside any lock to avoid blocking the poll loop
+    if Config.BT_TRACKERS:
+        try:
+            await TorrentManager.qbittorrent.torrents.add_trackers(
+                hash=hash_, trackers=Config.BT_TRACKERS
+            )
+            LOGGER.info(
+                f"Added {len(Config.BT_TRACKERS)} trackers to external torrent: "
+                f"{tor_info.name}"
+            )
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to add trackers to external torrent {tor_info.name}: {e}"
+            )
+
+    status = ExternalQbitStatus(tor_info, task_key)
+
+    # Now store the real status object and inject into task_dict
+    async with external_listener_lock:
         external_qb_torrents[hash_] = status
-        async with task_dict_lock:
-            task_dict[task_key] = status
+    async with task_dict_lock:
+        task_dict[task_key] = status
 
 
 @new_task
@@ -237,7 +242,10 @@ async def _qb_listener():
                             await sleep(0.5)
                     else:
                         # ---- external torrent: not started by bot ----
-                        await _handle_external_torrent(tor_info)
+                        # Only handle if tag is not a pure-digit bot mid
+                        # (guards against race where bot mid isn't in qb_torrents yet)
+                        if not tag.isdigit():
+                            await _handle_external_torrent(tor_info)
             except (ClientError, TimeoutError, Exception, AQError) as e:
                 LOGGER.error(str(e))
         await sleep(3)
@@ -261,4 +269,4 @@ def start_qb_listener():
     """Start the qBittorrent polling loop at bot startup so externally added
     torrents are monitored from the very first poll cycle."""
     if not intervals["qb"]:
-        intervals["qb"] = _qb_listener()
+        intervals["qb"] = bot_loop.create_task(_qb_listener())
