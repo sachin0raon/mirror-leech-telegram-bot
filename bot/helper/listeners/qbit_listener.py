@@ -193,13 +193,6 @@ async def _qb_listener():
         async with qb_listener_lock:
             try:
                 torrents = await TorrentManager.qbittorrent.torrents.info()
-                if len(torrents) == 0:
-                    # Only stop the listener if no external torrents are being tracked either
-                    async with external_listener_lock:
-                        has_external = bool(external_qb_torrents)
-                    if not has_external:
-                        intervals["qb"] = ""
-                        break
                 for tor_info in torrents:
                     tag = tor_info.tags[0] if tor_info.tags else ""
                     if tag in qb_torrents:
