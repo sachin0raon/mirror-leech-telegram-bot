@@ -52,23 +52,21 @@ class ExternalAria2Status:
             result = await TorrentManager.aria2.tellStatus(self._gid)
             if result:
                 self._download = result
-                # Handle magnet → torrent GID transition
+                # Handle magnet → torrent GID transition.
+                # NOTE: task_dict key swap is intentionally NOT done here because
+                # _refresh() is called from get_task_by_gid() which already holds
+                # task_dict_lock — re-acquiring it would deadlock (asyncio.Lock is
+                # not re-entrant). The aria2 listener's _on_download_complete
+                # handles re-registration of the new GID via _register_external_aria2.
                 if self._download.get("followedBy", []):
                     new_gid = self._download["followedBy"][0]
                     if new_gid != self._gid:
-                        # Update registry key
                         async with external_listener_lock:
                             if self._gid in external_aria2_downloads:
                                 del external_aria2_downloads[self._gid]
                             external_aria2_downloads[new_gid] = self
-                        # Update task_dict key
-                        old_key = self._task_key
-                        new_key = f"exta2_{new_gid[:8]}"
-                        async with task_dict_lock:
-                            if old_key in task_dict:
-                                task_dict[new_key] = task_dict.pop(old_key)
                         self._gid = new_gid
-                        self._task_key = new_key
+                        self._task_key = f"exta2_{new_gid[:8]}"
                         self._download = await TorrentManager.aria2.tellStatus(self._gid)
         except Exception as e:
             LOGGER.error(f"ExternalAria2Status: failed to refresh {self._gid}: {e}")

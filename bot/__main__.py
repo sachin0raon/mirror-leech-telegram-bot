@@ -60,11 +60,12 @@ async def main():
 bot_loop.run_until_complete(main())
 
 from .helper.ext_utils.bot_utils import create_help_buttons
-from .helper.listeners.aria2_listener import add_aria2_callbacks
+from .helper.listeners.aria2_listener import add_aria2_callbacks, scan_existing_aria2_downloads
 from .helper.listeners.qbit_listener import start_qb_listener
 from .core.handlers import add_handlers
 
 add_aria2_callbacks()
+bot_loop.create_task(scan_existing_aria2_downloads())
 start_qb_listener()
 create_help_buttons()
 add_handlers()

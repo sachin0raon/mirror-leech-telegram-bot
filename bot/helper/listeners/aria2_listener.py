@@ -35,31 +35,38 @@ async def _register_external_aria2(gid: str, download: dict):
     appears in /status output and can be cancelled via /cancel <gid>."""
     task_key = f"exta2_{gid[:8]}"
 
+    # Fast check with sentinel to prevent double-registration across concurrent calls
     async with external_listener_lock:
         if gid in external_aria2_downloads:
-            return   # already registered
+            return   # already registered (or being registered)
+        # Mark immediately so concurrent calls skip registration
+        external_aria2_downloads[gid] = None
 
-        name = aria2_name(download) or gid
-        LOGGER.info(f"Detected external aria2 download: '{name}' (GID: {gid})")
+    name = aria2_name(download) or gid
+    LOGGER.info(f"Detected external aria2 download: '{name}' (GID: {gid})")
 
-        # Inject bot trackers if this is a BitTorrent download
-        if "bittorrent" in download and Config.BT_TRACKERS_ARIA:
-            try:
-                await TorrentManager.aria2.changeOption(
-                    gid, {"bt-tracker": Config.BT_TRACKERS_ARIA}
-                )
-                LOGGER.info(
-                    f"Added trackers to external aria2 download: '{name}'"
-                )
-            except Exception as e:
-                LOGGER.warning(
-                    f"Failed to add trackers to external aria2 download '{name}': {e}"
-                )
+    # Inject bot trackers if this is a BitTorrent download
+    # API call is outside the lock to avoid blocking other coroutines
+    if "bittorrent" in download and Config.BT_TRACKERS_ARIA:
+        try:
+            await TorrentManager.aria2.changeOption(
+                gid, {"bt-tracker": Config.BT_TRACKERS_ARIA}
+            )
+            LOGGER.info(
+                f"Added trackers to external aria2 download: '{name}'"
+            )
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to add trackers to external aria2 download '{name}': {e}"
+            )
 
-        status = ExternalAria2Status(gid, download, task_key)
+    status = ExternalAria2Status(gid, download, task_key)
+
+    # Store real status object and inject into task_dict
+    async with external_listener_lock:
         external_aria2_downloads[gid] = status
-        async with task_dict_lock:
-            task_dict[task_key] = status
+    async with task_dict_lock:
+        task_dict[task_key] = status
 
 
 async def _remove_external_aria2(gid: str):
@@ -71,6 +78,71 @@ async def _remove_external_aria2(gid: str):
             if status._task_key in task_dict:
                 del task_dict[status._task_key]
         LOGGER.info(f"Removed external aria2 download from tracking (GID: {gid})")
+
+
+async def scan_existing_aria2_downloads():
+    """Scan aria2 for downloads that were already active/waiting before the bot
+    started and register them as external so they appear in /status.
+
+    Called once at startup after callbacks are registered.
+    """
+    try:
+        results = await TorrentManager.aria2.getGlobalStat()
+        active_count = int(results.get("numActive", 0))
+        waiting_count = int(results.get("numWaiting", 0))
+        if active_count == 0 and waiting_count == 0:
+            return
+
+        downloads = []
+        if active_count:
+            active = await TorrentManager.aria2.tellActive()
+            downloads.extend(active)
+        if waiting_count:
+            waiting = await TorrentManager.aria2.tellWaiting(0, waiting_count)
+            downloads.extend(waiting)
+
+        if not downloads:
+            return
+
+        # Collect full GIDs already managed by the bot to avoid double-tracking
+        async with task_dict_lock:
+            bot_gids = set()
+            for tk in task_dict.values():
+                if callable(getattr(tk, "gid", None)):
+                    bot_gids.add(tk.gid())
+                # Also store hash for qBit tasks where gid() returns hash[:12]
+                if callable(getattr(tk, "hash", None)):
+                    bot_gids.add(tk.hash())
+
+        registered = 0
+        for download in downloads:
+            gid = download.get("gid", "")
+            if not gid:
+                continue
+            # Skip bot-managed downloads
+            if gid in bot_gids or gid[:12] in bot_gids:
+                continue
+            # Skip metadata entries — they resolve to a real GID via followedBy
+            # and will be registered when onDownloadStarted fires for that GID.
+            if is_metadata(download):
+                continue
+            # Skip already-registered external downloads
+            async with external_listener_lock:
+                if gid in external_aria2_downloads:
+                    continue
+            await _register_external_aria2(gid, download)
+            registered += 1
+
+        if registered:
+            LOGGER.info(
+                f"Startup scan: registered {registered} pre-existing external "
+                f"aria2 download(s)"
+            )
+        else:
+            LOGGER.info("Startup scan: no new external aria2 downloads found")
+
+    except Exception as e:
+        LOGGER.error(f"scan_existing_aria2_downloads: {e}")
 
 
 async def _on_download_started(api, data):
