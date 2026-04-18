@@ -289,6 +289,14 @@ async def on_download_start(tag):
 
 def start_qb_listener():
     """Start the qBittorrent polling loop at bot startup so externally added
-    torrents are monitored from the very first poll cycle."""
+    torrents are monitored from the very first poll cycle.
+
+    _qb_listener is decorated with @new_task whose wrapper is itself an async
+    function. Calling _qb_listener() returns a coroutine of that wrapper, not
+    of the inner loop. Awaiting it (as on_download_start does) runs the wrapper
+    which internally calls bot_loop.create_task(inner_coro) and returns the Task.
+    In this sync context we cannot await, so we use __wrapped__ (set by
+    functools.wraps) to access the original coroutine function directly.
+    """
     if not intervals["qb"]:
-        intervals["qb"] = bot_loop.create_task(_qb_listener())
+        intervals["qb"] = bot_loop.create_task(_qb_listener.__wrapped__())
