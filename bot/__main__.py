@@ -29,16 +29,8 @@ async def main():
     await gather(TgClient.start_bot(), TgClient.start_user())
 
     from .helper.ext_utils.bot_utils import create_help_buttons
-    from .helper.listeners.aria2_listener import (
-        add_aria2_callbacks,
-        scan_existing_aria2_downloads,
-    )
-    from .helper.listeners.qbit_listener import start_qb_listener
     from .core.handlers import add_handlers
 
-    add_aria2_callbacks()
-    bot_loop.create_task(scan_existing_aria2_downloads())
-    start_qb_listener()
     create_help_buttons()
     add_handlers()
 
@@ -49,6 +41,17 @@ async def main():
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
+
+    from .helper.listeners.aria2_listener import (
+        add_aria2_callbacks,
+        scan_existing_aria2_downloads,
+    )
+    from .helper.listeners.qbit_listener import start_qb_listener
+
+    add_aria2_callbacks()
+    bot_loop.create_task(scan_existing_aria2_downloads())
+    start_qb_listener()
+
     await gather(
         update_qb_options(),
         update_aria2_options(),
