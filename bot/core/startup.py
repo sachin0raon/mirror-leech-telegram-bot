@@ -56,14 +56,15 @@ async def update_aria2_options():
 
 async def update_nzb_options():
     LOGGER.info("Get SABnzbd options from server")
-    while True:
+    count = 0
+    while count < 10:
         try:
             no = (await sabnzbd_client.get_config())["config"]["misc"]
             nzb_options.update(no)
+            break
         except:
-            await sleep(0.5)
-            continue
-        break
+            count += 1
+            await sleep(1)
 
 
 async def load_settings():
@@ -205,6 +206,7 @@ async def update_variables():
         Config.USER_TRANSMISSION and TgClient.IS_PREMIUM_USER
     )
 
+    auth_chats.clear()
     if Config.AUTHORIZED_CHATS:
         aid = Config.AUTHORIZED_CHATS.split()
         for id_ in aid:
@@ -216,6 +218,7 @@ async def update_variables():
             else:
                 auth_chats[chat_id] = []
 
+    sudo_users.clear()
     if Config.SUDO_USERS:
         aid = Config.SUDO_USERS.split()
         for id_ in aid:
@@ -233,6 +236,9 @@ async def update_variables():
             x = x.lstrip(".")
             included_extensions.append(x.strip().lower())
 
+    drives_names.clear()
+    drives_ids.clear()
+    index_urls.clear()
     if Config.GDRIVE_ID:
         drives_names.append("Main")
         drives_ids.append(Config.GDRIVE_ID)
