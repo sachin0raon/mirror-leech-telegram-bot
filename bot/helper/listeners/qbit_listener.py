@@ -5,11 +5,14 @@ from aiohttp.client_exceptions import ClientError
 from aioqbt.exc import AQError
 
 from ... import (
+    bot_loop,
     task_dict,
     task_dict_lock,
     intervals,
     qb_torrents,
     qb_listener_lock,
+    external_qb_torrents,
+    external_listener_lock,
     LOGGER,
 )
 from ...core.config_manager import Config
@@ -19,6 +22,7 @@ from ..ext_utils.files_utils import clean_unwanted
 from ..ext_utils.status_utils import get_readable_time, get_task_by_gid
 from ..ext_utils.task_manager import stop_duplicate_check
 from ..mirror_leech_utils.status_utils.qbit_status import QbittorrentStatus
+from ..mirror_leech_utils.status_utils.external_qbit_status import ExternalQbitStatus
 from ..telegram_helper.message_utils import update_status_message
 
 
@@ -46,7 +50,7 @@ async def _on_seed_finish(tor):
     ext_hash = tor.hash
     LOGGER.info(f"Cancelling Seed: {tor.name}")
     if task := await get_task_by_gid(ext_hash[:12]):
-        msg = f"Seeding stopped with Ratio: {round(tor.ratio, 3)} and Time: {get_readable_time(int(tor.seeding_time.total_seconds() or "0"))}"
+        msg = f"Seeding stopped with Ratio: {round(tor.ratio, 3)} and Time: {get_readable_time(int(tor.seeding_time.total_seconds() or '0'))}"
         await task.listener.on_upload_error(msg)
     await _remove_torrent(ext_hash, tor.tags[0], False)
 
@@ -108,81 +112,164 @@ async def _on_download_complete(tor):
         await _remove_torrent(ext_hash, tag, False)
 
 
+# Hashes of external torrents that were fully completed/stopped.
+# Kept so they don't get re-registered into the status message.
+_ignored_external_hashes: set = set()
+
+
+async def _handle_external_torrent(tor_info):
+    """Register a torrent not started by the bot into task_dict so it appears
+    in /status output and can be cancelled via /cancel <gid>."""
+    hash_ = tor_info.hash
+    task_key = f"extqb_{hash_[:8]}"
+
+    if hash_ in _ignored_external_hashes:
+        return
+
+    async with external_listener_lock:
+        if hash_ in external_qb_torrents:
+            return
+
+        # Mark as registered immediately so concurrent poll cycles don't double-register
+        external_qb_torrents[hash_] = None
+
+    LOGGER.info(f"Detected external qBittorrent torrent: {tor_info.name} ({hash_})")
+
+    # Inject bot trackers — API call outside any lock to avoid blocking the poll loop
+    if Config.BT_TRACKERS:
+        try:
+            await TorrentManager.qbittorrent.torrents.add_trackers(
+                hash=hash_, trackers=Config.BT_TRACKERS
+            )
+            LOGGER.info(
+                f"Added {len(Config.BT_TRACKERS)} trackers to external torrent: "
+                f"{tor_info.name}"
+            )
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to add trackers to external torrent {tor_info.name}: {e}"
+            )
+
+    status = ExternalQbitStatus(tor_info, task_key)
+
+    # Now store the real status object and inject into task_dict
+    async with external_listener_lock:
+        external_qb_torrents[hash_] = status
+    async with task_dict_lock:
+        task_dict[task_key] = status
+
+
+
 @new_task
 async def _qb_listener():
     while True:
         async with qb_listener_lock:
             try:
                 torrents = await TorrentManager.qbittorrent.torrents.info()
-                if len(torrents) == 0:
-                    intervals["qb"] = ""
-                    break
+                active_hashes = set()
                 for tor_info in torrents:
-                    tag = tor_info.tags[0]
-                    if tag not in qb_torrents:
-                        continue
-                    state = tor_info.state
-                    if state == "metaDL":
-                        qb_torrents[tag]["stalled_time"] = time()
-                        if (
-                            Config.TORRENT_TIMEOUT
-                            and time() - qb_torrents[tag]["start_time"]
-                            >= Config.TORRENT_TIMEOUT
-                        ):
-                            await _on_download_error("Dead Torrent!", tor_info)
-                        else:
-                            await TorrentManager.qbittorrent.torrents.reannounce(
-                                [tor_info.hash]
-                            )
-                    elif state == "downloading":
-                        qb_torrents[tag]["stalled_time"] = time()
-                        if not qb_torrents[tag]["stop_dup_check"]:
-                            qb_torrents[tag]["stop_dup_check"] = True
-                            await _stop_duplicate(tor_info)
-                    elif state == "stalledDL":
-                        if (
-                            not qb_torrents[tag]["rechecked"]
-                            and 0.99989999999999999 < tor_info.progress < 1
-                        ):
-                            msg = f"Force recheck - Name: {tor_info.name} Hash: "
-                            msg += f"{tor_info.hash} Downloaded Bytes: {tor_info.downloaded} "
-                            msg += f"Size: {tor_info.size} Total Size: {tor_info.total_size}"
-                            LOGGER.warning(msg)
+                    active_hashes.add(tor_info.hash)
+                    tag = tor_info.tags[0] if tor_info.tags else ""
+                    if tag in qb_torrents:
+                        # ---- existing bot-managed torrent logic (unchanged) ----
+                        state = tor_info.state
+                        if state == "metaDL":
+                            qb_torrents[tag]["stalled_time"] = time()
+                            if (
+                                Config.TORRENT_TIMEOUT
+                                and time() - qb_torrents[tag]["start_time"]
+                                >= Config.TORRENT_TIMEOUT
+                            ):
+                                await _on_download_error("Dead Torrent!", tor_info)
+                            else:
+                                await TorrentManager.qbittorrent.torrents.reannounce(
+                                    [tor_info.hash]
+                                )
+                        elif state == "downloading":
+                            qb_torrents[tag]["stalled_time"] = time()
+                            if not qb_torrents[tag]["stop_dup_check"]:
+                                qb_torrents[tag]["stop_dup_check"] = True
+                                await _stop_duplicate(tor_info)
+                        elif state == "stalledDL":
+                            if (
+                                not qb_torrents[tag]["rechecked"]
+                                and 0.99989999999999999 < tor_info.progress < 1
+                            ):
+                                msg = f"Force recheck - Name: {tor_info.name} Hash: "
+                                msg += f"{tor_info.hash} Downloaded Bytes: {tor_info.downloaded} "
+                                msg += f"Size: {tor_info.size} Total Size: {tor_info.total_size}"
+                                LOGGER.warning(msg)
+                                await TorrentManager.qbittorrent.torrents.recheck(
+                                    [tor_info.hash]
+                                )
+                                qb_torrents[tag]["rechecked"] = True
+                            elif (
+                                Config.TORRENT_TIMEOUT
+                                and time() - qb_torrents[tag]["stalled_time"]
+                                >= Config.TORRENT_TIMEOUT
+                            ):
+                                await _on_download_error("Dead Torrent!", tor_info)
+                            else:
+                                await TorrentManager.qbittorrent.torrents.reannounce(
+                                    [tor_info.hash]
+                                )
+                        elif state == "missingFiles":
                             await TorrentManager.qbittorrent.torrents.recheck(
                                 [tor_info.hash]
                             )
-                            qb_torrents[tag]["rechecked"] = True
-                        elif (
-                            Config.TORRENT_TIMEOUT
-                            and time() - qb_torrents[tag]["stalled_time"]
-                            >= Config.TORRENT_TIMEOUT
-                        ):
-                            await _on_download_error("Dead Torrent!", tor_info)
-                        else:
-                            await TorrentManager.qbittorrent.torrents.reannounce(
-                                [tor_info.hash]
+                        elif state == "error":
+                            await _on_download_error(
+                                "No enough space for this torrent on device", tor_info
                             )
-                    elif state == "missingFiles":
-                        await TorrentManager.qbittorrent.torrents.recheck(
-                            [tor_info.hash]
-                        )
-                    elif state == "error":
-                        await _on_download_error(
-                            "No enough space for this torrent on device", tor_info
-                        )
-                    elif (
-                        int(tor_info.completion_on.timestamp()) != -1
-                        and not qb_torrents[tag]["uploaded"]
-                    ):
-                        qb_torrents[tag]["uploaded"] = True
-                        await _on_download_complete(tor_info)
-                    elif (
-                        state in ["stoppedUP", "stoppedDL"]
-                        and qb_torrents[tag]["seeding"]
-                    ):
-                        qb_torrents[tag]["seeding"] = False
-                        await _on_seed_finish(tor_info)
-                        await sleep(0.5)
+                        elif (
+                            int(tor_info.completion_on.timestamp()) != -1
+                            and not qb_torrents[tag]["uploaded"]
+                        ):
+                            qb_torrents[tag]["uploaded"] = True
+                            await _on_download_complete(tor_info)
+                        elif (
+                            state in ["stoppedUP", "stoppedDL"]
+                            and qb_torrents[tag]["seeding"]
+                        ):
+                            qb_torrents[tag]["seeding"] = False
+                            await _on_seed_finish(tor_info)
+                            await sleep(0.5)
+                    else:
+                        # ---- external torrent: not started by bot ----
+                        # Only handle if tag is not a pure-digit bot mid
+                        # (guards against race where bot mid isn't in qb_torrents yet)
+                        if not tag.isdigit():
+                            if tor_info.progress == 1 and tor_info.state == "stoppedUP":
+                                # Completed and stopped external torrent — hide from status forever
+                                if tor_info.hash not in _ignored_external_hashes:
+                                    _ignored_external_hashes.add(tor_info.hash)
+                                    task_key = f"extqb_{tor_info.hash[:8]}"
+                                    async with external_listener_lock:
+                                        if tor_info.hash in external_qb_torrents:
+                                            del external_qb_torrents[tor_info.hash]
+                                    async with task_dict_lock:
+                                        if task_key in task_dict:
+                                            del task_dict[task_key]
+                                    LOGGER.info(f"External qBittorrent torrent completed/stopped, removing from tracking: {tor_info.name}")
+                            else:
+                                await _handle_external_torrent(tor_info)
+
+                # Check for external torrents that were deleted from qBittorrent
+                to_remove = []
+                async with external_listener_lock:
+                    for hash_ in list(external_qb_torrents.keys()):
+                        if hash_ not in active_hashes:
+                            to_remove.append(hash_)
+                            del external_qb_torrents[hash_]
+
+                if to_remove:
+                    async with task_dict_lock:
+                        for hash_ in to_remove:
+                            task_key = f"extqb_{hash_[:8]}"
+                            if task_key in task_dict:
+                                del task_dict[task_key]
+                            LOGGER.info(f"External qBittorrent torrent removed from client tracking: {hash_}")
+
             except (ClientError, TimeoutError, Exception, AQError) as e:
                 LOGGER.error(str(e))
         await sleep(3)
@@ -200,3 +287,18 @@ async def on_download_start(tag):
         }
         if not intervals["qb"]:
             intervals["qb"] = await _qb_listener()
+
+
+def start_qb_listener():
+    """Start the qBittorrent polling loop at bot startup so externally added
+    torrents are monitored from the very first poll cycle.
+
+    _qb_listener is decorated with @new_task whose wrapper is itself an async
+    function. Calling _qb_listener() returns a coroutine of that wrapper, not
+    of the inner loop. Awaiting it (as on_download_start does) runs the wrapper
+    which internally calls bot_loop.create_task(inner_coro) and returns the Task.
+    In this sync context we cannot await, so we use __wrapped__ (set by
+    functools.wraps) to access the original coroutine function directly.
+    """
+    if not intervals["qb"]:
+        intervals["qb"] = bot_loop.create_task(_qb_listener.__wrapped__())

@@ -1,13 +1,14 @@
 from html import escape
+from typing import Optional
 from psutil import virtual_memory, cpu_percent, disk_usage, sensors_temperatures
 from time import time
 from asyncio import iscoroutinefunction, gather
-from typing import Optional
-from .bot_utils import cmd_exec
+from pyrogram.types import InlineKeyboardButton
+
 from ... import task_dict, task_dict_lock, bot_start_time, status_dict, DOWNLOAD_DIR
 from ...core.config_manager import Config
 from ..telegram_helper.button_build import ButtonMaker
-from ..telegram_helper.bot_commands import BotCommands
+from .bot_utils import cmd_exec
 
 SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"]
 
@@ -175,6 +176,7 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
         status_dict[sid]["page_no"] = page_no
     start_position = (page_no - 1) * STATUS_LIMIT
 
+    task_gids = []
     for index, task in enumerate(
         tasks[start_position : STATUS_LIMIT + start_position], start=1
     ):
@@ -193,7 +195,7 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
             msg += f"\n<i>{task.listener.subname}</i>"
         if (
             tstatus not in [MirrorStatus.STATUS_SEED, MirrorStatus.STATUS_QUEUEUP]
-            and task.listener.progress
+            and getattr(task.listener, "progress", getattr(task.listener, "show_progress", True))
         ):
             progress = task.progress()
             msg += f"\n{get_progress_bar_string(progress)} {progress}"
@@ -228,7 +230,8 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
         else:
             msg += f"\n<b>Size: </b>{task.size()}"
         msg += f"\n<b>Elapsed Time:</b> <code>{get_readable_time(time() - task.listener.download_start_time)}</code>"
-        msg += f"\n<code>/{BotCommands.CancelTaskCommand[1]} {task.gid()}</code>\n\n"
+        msg += f"\n<b>Gid: </b><code>{task.gid()}</code>\n\n"
+        task_gids.append((index + start_position, task.gid()))
 
     if len(msg) == 0:
         if status == "All":
@@ -251,6 +254,16 @@ async def get_readable_message(sid, is_user, page_no=1, status="All", page_step=
                 buttons.data_button(label, f"status {sid} st {status_value}")
     buttons.data_button("♻️", f"status {sid} ref", position="header")
     button = buttons.build_menu(8)
+    if task_gids:
+        cancel_buttons = [
+            InlineKeyboardButton(
+                text=f"❌ {num}",
+                callback_data=f"status {sid} cancel {gid}",
+            )
+            for num, gid in task_gids
+        ]
+        for i in range(0, len(cancel_buttons), 4):
+            button.inline_keyboard.append(cancel_buttons[i : i + 4])
     msg += f"<b>CPU:</b> {cpu_percent()}% | <b>TEMP:</b> {await get_cpu_temp()} | <b>FREE:</b> {get_readable_file_size(disk_usage(DOWNLOAD_DIR).free)}"
     msg += f"\n<b>RAM:</b> {virtual_memory().percent}% | <b>UPTIME:</b> {get_readable_time(time() - bot_start_time)}"
     return msg, button

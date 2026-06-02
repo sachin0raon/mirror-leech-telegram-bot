@@ -1,0 +1,180 @@
+from time import time
+
+from .... import LOGGER, task_dict, task_dict_lock, external_aria2_downloads, external_listener_lock
+from ....core.config_manager import Config
+from ....core.torrent_manager import TorrentManager, aria2_name
+from ...ext_utils.status_utils import (
+    MirrorStatus,
+    get_readable_file_size,
+    get_readable_time,
+)
+
+
+class ExternalAria2Status:
+    """
+    Read-only status wrapper for aria2 downloads that were added externally
+    (e.g. via the aria2 RPC interface directly, not via a bot command).
+
+    Uses a self-referential ``listener`` so the existing
+    ``get_readable_message()`` / ``cancel`` pipeline works without modification.
+    """
+
+    def __init__(self, gid: str, download: dict, task_key: str):
+        self._gid = gid
+        self._download = download
+        self._task_key = task_key          # key used in task_dict, e.g. "exta2_<gid[:8]>"
+        self.download_start_time = time()
+        self.seeding = False
+        self.queued = False
+        self.start_time = time()           # initialised to now so seeding_time() is meaningful
+        self.tool = "aria2"
+
+        # --- self-referential listener fields expected by the status pipeline ---
+        self.listener = self
+        self.user_id = Config.OWNER_ID     # only owner can cancel external tasks
+        self.is_super_chat = False         # suppresses message.link path
+        self.is_qbit = False
+        self.is_torrent = True
+        self.is_cancelled = False
+        self.mid = task_key                # used by any code referencing listener.mid
+        self.subname = ""
+        self.show_progress = True          # flag read as task.listener.progress in status rendering
+        self.subsize = 0
+        self.files_to_proceed = []
+        self.proceed_count = 0
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    async def _refresh(self):
+        try:
+            result = await TorrentManager.aria2.tellStatus(self._gid)
+            if result:
+                self._download = result
+                # Handle magnet → torrent GID transition.
+                # NOTE: task_dict key swap is intentionally NOT done here because
+                # _refresh() is called from get_task_by_gid() which already holds
+                # task_dict_lock — re-acquiring it would deadlock (asyncio.Lock is
+                # not re-entrant). The aria2 listener's _on_download_complete
+                # handles re-registration of the new GID via _register_external_aria2.
+                if self._download.get("followedBy", []):
+                    new_gid = self._download["followedBy"][0]
+                    if new_gid != self._gid:
+                        async with external_listener_lock:
+                            if self._gid in external_aria2_downloads:
+                                del external_aria2_downloads[self._gid]
+                            external_aria2_downloads[new_gid] = self
+                        self._gid = new_gid
+                        self._task_key = f"exta2_{new_gid[:8]}"
+                        self._download = await TorrentManager.aria2.tellStatus(self._gid)
+        except Exception as e:
+            # If tellStatus throws, the download was completely purged from aria2
+            # (e.g. "Clear Stopped" in Web UI). Trigger async cleanup. Spawn as
+            # background task to avoid deadlocking if caller holds task_dict_lock.
+            from .... import bot_loop
+            from ...listeners.aria2_listener import _remove_external_aria2
+            bot_loop.create_task(_remove_external_aria2(self._gid))
+
+    # ------------------------------------------------------------------
+    # Status interface (mirrors Aria2Status)
+    # ------------------------------------------------------------------
+
+    async def update(self):
+        await self._refresh()
+
+    def progress(self):
+        try:
+            return f"{round(int(self._download.get('completedLength', '0')) / int(self._download.get('totalLength', '0')) * 100, 2)}%"
+        except Exception:
+            return "0%"
+
+    def processed_bytes(self):
+        return get_readable_file_size(int(self._download.get("completedLength", "0")))
+
+    def speed(self):
+        return f"{get_readable_file_size(int(self._download.get('downloadSpeed', '0')))}/s"
+
+    def name(self):
+        return aria2_name(self._download)
+
+    def size(self):
+        return get_readable_file_size(int(self._download.get("totalLength", "0")))
+
+    def eta(self):
+        try:
+            return get_readable_time(
+                int(
+                    (int(self._download.get("totalLength", "0")) - int(self._download.get("completedLength", "0")))
+                    / int(self._download.get("downloadSpeed", "0"))
+                )
+            )
+        except Exception:
+            return "-"
+
+    async def status(self):
+        await self._refresh()
+        dl_status = self._download.get("status", "")
+        if dl_status == "waiting" or self.queued:
+            return MirrorStatus.STATUS_QUEUEDL
+        elif dl_status == "paused":
+            return MirrorStatus.STATUS_PAUSED
+        elif self._download.get("seeder", "") == "true" and self.seeding:
+            return MirrorStatus.STATUS_SEED
+        else:
+            return MirrorStatus.STATUS_DOWNLOAD
+
+    def seeders_num(self):
+        return self._download.get("numSeeders", 0)
+
+    def leechers_num(self):
+        return self._download.get("connections", 0)
+
+    def uploaded_bytes(self):
+        return get_readable_file_size(int(self._download.get("uploadLength", "0")))
+
+    def seed_speed(self):
+        return f"{get_readable_file_size(int(self._download.get('uploadSpeed', '0')))}/s"
+
+    def ratio(self):
+        try:
+            return round(
+                int(self._download.get("uploadLength", "0")) / int(self._download.get("completedLength", "0")),
+                3,
+            )
+        except Exception:
+            return 0
+
+    def seeding_time(self):
+        return get_readable_time(time() - self.start_time)
+
+    def task(self):
+        return self
+
+    def gid(self):
+        return self._gid
+
+    # ------------------------------------------------------------------
+    # Cancellation — removes the download from aria2, then cleans up
+    # task_dict / external_aria2_downloads. No Telegram callbacks.
+    # ------------------------------------------------------------------
+
+    async def cancel_task(self):
+        self.is_cancelled = True
+        await self._refresh()
+        name = self.name() or self._gid
+        LOGGER.info(f"ExternalAria2Status: cancelling external download '{name}' ({self._gid})")
+        try:
+            await TorrentManager.aria2_remove(self._download)
+        except Exception as e:
+            LOGGER.error(f"ExternalAria2Status: error while removing {self._gid}: {e}")
+
+        async with task_dict_lock:
+            if self._task_key in task_dict:
+                del task_dict[self._task_key]
+
+        async with external_listener_lock:
+            if self._gid in external_aria2_downloads:
+                del external_aria2_downloads[self._gid]
+
+        LOGGER.info(f"ExternalAria2Status: removed '{name}' from tracking")

@@ -49,7 +49,7 @@ async def cancel(_, message):
     if (
         Config.OWNER_ID != user_id
         and task.listener.user_id != user_id
-        and (user_id not in user_data or not user_data[user_id].get("SUDO"))
+        and (not user_data[user_id].get("SUDO") or user_id not in user_data)
     ):
         await send_message(message, "This task is not for you!")
         return
@@ -94,7 +94,7 @@ def create_cancel_buttons(is_sudo, user_id=""):
         "Uploading", f"canall ms {MirrorStatus.STATUS_UPLOAD} {user_id}"
     )
     buttons.data_button("Seeding", f"canall ms {MirrorStatus.STATUS_SEED} {user_id}")
-    buttons.data_button("Spltting", f"canall ms {MirrorStatus.STATUS_SPLIT} {user_id}")
+    buttons.data_button("Splitting", f"canall ms {MirrorStatus.STATUS_SPLIT} {user_id}")
     buttons.data_button("Cloning", f"canall ms {MirrorStatus.STATUS_CLONE} {user_id}")
     buttons.data_button(
         "Extracting", f"canall ms {MirrorStatus.STATUS_EXTRACT} {user_id}"

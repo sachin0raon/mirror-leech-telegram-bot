@@ -22,14 +22,36 @@ async def main():
     download_cookie_file(Config.COOKIE_FILE_URL)
     if not is_empty_or_blank(Config.NGROK_AUTH_TOKEN):
         await start_ngrok(Config.NGROK_AUTH_TOKEN, DOWNLOAD_DIR)
+
     await load_settings()
+    await update_variables()
 
     await gather(TgClient.start_bot(), TgClient.start_user())
-    await gather(load_configurations(), update_variables())
+
+    from .helper.ext_utils.bot_utils import create_help_buttons
+    from .core.handlers import add_handlers
+
+    create_help_buttons()
+    add_handlers()
+
+    LOGGER.info("Bot Started!")
+
+    await load_configurations()
 
     from .core.torrent_manager import TorrentManager
 
     await TorrentManager.initiate()
+
+    from .helper.listeners.aria2_listener import (
+        add_aria2_callbacks,
+        scan_existing_aria2_downloads,
+    )
+    from .helper.listeners.qbit_listener import start_qb_listener
+
+    add_aria2_callbacks()
+    bot_loop.create_task(scan_existing_aria2_downloads())
+    start_qb_listener()
+
     await gather(
         update_qb_options(),
         update_aria2_options(),
@@ -58,14 +80,4 @@ async def main():
 
 
 bot_loop.run_until_complete(main())
-
-from .helper.ext_utils.bot_utils import create_help_buttons
-from .helper.listeners.aria2_listener import add_aria2_callbacks
-from .core.handlers import add_handlers
-
-add_aria2_callbacks()
-create_help_buttons()
-add_handlers()
-
-LOGGER.info("Bot Started!")
 bot_loop.run_forever()
