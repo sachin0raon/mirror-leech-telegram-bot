@@ -40,10 +40,14 @@ from ..ext_utils.status_utils import get_readable_file_size
 from ..ext_utils.task_manager import start_from_queued, check_running_tasks
 from ..mirror_leech_utils.gdrive_utils.upload import GoogleDriveUpload
 from ..mirror_leech_utils.rclone_utils.transfer import RcloneTransferHelper
+from ..mirror_leech_utils.buzzheavier_uploader import BuzzHeavierUploader
+from ..mirror_leech_utils.gofile_uploader import GoFileUploader
 from ..mirror_leech_utils.status_utils.gdrive_status import GoogleDriveStatus
 from ..mirror_leech_utils.status_utils.queue_status import QueueStatus
 from ..mirror_leech_utils.status_utils.rclone_status import RcloneStatus
 from ..mirror_leech_utils.status_utils.telegram_status import TelegramStatus
+from ..mirror_leech_utils.status_utils.buzzheavier_status import BuzzHeavierStatus
+from ..mirror_leech_utils.status_utils.gofile_status import GoFileStatus
 from ..mirror_leech_utils.telegram_uploader import TelegramUploader
 from ..telegram_helper.button_build import ButtonMaker
 from ..telegram_helper.message_utils import (
@@ -201,7 +205,7 @@ class TaskListener(TaskConfig):
 
         if not await aiopath.exists(up_path):
             e = "No files to upload. In case you have filled EXCLUDED/INCLUDED EXTENSIONS, then check if all files have those extensions or not."
-            await self.on_upload_error(str(e))
+            await self.on_upload_error(e)
             return
 
         if not Config.QUEUE_ALL:
@@ -319,6 +323,26 @@ class TaskListener(TaskConfig):
                 tg.upload(),
             )
             del tg
+        elif self.is_buzzheavier:
+            LOGGER.info(f"BuzzHeavier Upload Name: {self.name}")
+            bh = BuzzHeavierUploader(self, up_path)
+            async with task_dict_lock:
+                task_dict[self.mid] = BuzzHeavierStatus(self, bh, gid, "up")
+            await gather(
+                update_status_message(self.message.chat.id),
+                bh.upload(),
+            )
+            del bh
+        elif self.is_gofile:
+            LOGGER.info(f"GoFile Upload Name: {self.name}")
+            gf = GoFileUploader(self, up_path)
+            async with task_dict_lock:
+                task_dict[self.mid] = GoFileStatus(self, gf, gid, "up")
+            await gather(
+                update_status_message(self.message.chat.id),
+                gf.upload(),
+            )
+            del gf
         elif is_gdrive_id(self.up_dest):
             LOGGER.info(f"Gdrive Upload Name: {self.name}")
             error_msg = ""
@@ -368,7 +392,7 @@ class TaskListener(TaskConfig):
         if error_msg:
             msg += f"\n\n<b>Error: </b><code>{error_msg}</code>\n"
         LOGGER.info(f"Task Done: {self.name}")
-        if self.is_leech:
+        if self.is_leech or self.is_buzzheavier:
             msg += f"\n<b>Total Files: </b>{folders}"
             if mime_type != 0:
                 msg += f"\n<b>Corrupted Files: </b>{mime_type}"
@@ -455,6 +479,16 @@ class TaskListener(TaskConfig):
                 del task_dict[self.mid]
             count = len(task_dict)
         await self.remove_from_same_dir()
+        if magnet_id := getattr(self, "_alldebrid_magnet_id", 0) or 0:
+            try:
+                from ..mirror_leech_utils.download_utils.alldebrid_resolver import (
+                    delete_magnet,
+                )
+
+                await delete_magnet(magnet_id)
+            except:
+                pass
+            self._alldebrid_magnet_id = 0
         msg = f"{self.tag} Download: {escape(str(error))}"
         await send_message(self.message, msg, button)
         if count == 0:
