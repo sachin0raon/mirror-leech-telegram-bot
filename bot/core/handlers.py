@@ -341,3 +341,9 @@ def add_handlers():
             filters=command(BotCommands.NgrokCommand) & CustomFilters.authorized
         )
     )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            update_cookie,
+            filters=command(BotCommands.CookieCommand) & CustomFilters.authorized
+        )
+    )

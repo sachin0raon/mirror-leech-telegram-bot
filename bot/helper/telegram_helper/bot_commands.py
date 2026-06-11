@@ -45,3 +45,4 @@ class BotCommands:
     RssCommand = f"rss{i}"
     NzbSearchCommand = f"nzbsearch{i}"
     NgrokCommand = f'ngrok{i}'
+    CookieCommand = f"cookie{i}"
