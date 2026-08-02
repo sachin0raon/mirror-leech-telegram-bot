@@ -40,15 +40,15 @@ from ..ext_utils.status_utils import get_readable_file_size
 from ..ext_utils.task_manager import start_from_queued, check_running_tasks
 from ..mirror_leech_utils.gdrive_utils.upload import GoogleDriveUpload
 from ..mirror_leech_utils.rclone_utils.transfer import RcloneTransferHelper
-from ..mirror_leech_utils.buzzheavier_uploader import BuzzHeavierUploader
-from ..mirror_leech_utils.gofile_uploader import GoFileUploader
+from ..mirror_leech_utils.upload_utils.buzzheavier_uploader import BuzzHeavierUploader
+from ..mirror_leech_utils.upload_utils.gofile_uploader import GoFileUploader
 from ..mirror_leech_utils.status_utils.gdrive_status import GoogleDriveStatus
 from ..mirror_leech_utils.status_utils.queue_status import QueueStatus
 from ..mirror_leech_utils.status_utils.rclone_status import RcloneStatus
 from ..mirror_leech_utils.status_utils.telegram_status import TelegramStatus
 from ..mirror_leech_utils.status_utils.buzzheavier_status import BuzzHeavierStatus
 from ..mirror_leech_utils.status_utils.gofile_status import GoFileStatus
-from ..mirror_leech_utils.telegram_uploader import TelegramUploader
+from ..mirror_leech_utils.upload_utils.telegram_uploader import TelegramUploader
 from ..telegram_helper.button_build import ButtonMaker
 from ..telegram_helper.message_utils import (
     send_message,
@@ -392,7 +392,7 @@ class TaskListener(TaskConfig):
         if error_msg:
             msg += f"\n\n<b>Error: </b><code>{error_msg}</code>\n"
         LOGGER.info(f"Task Done: {self.name}")
-        if self.is_leech or self.is_buzzheavier:
+        if self.is_leech:
             msg += f"\n<b>Total Files: </b>{folders}"
             if mime_type != 0:
                 msg += f"\n<b>Corrupted Files: </b>{mime_type}"
@@ -414,7 +414,11 @@ class TaskListener(TaskConfig):
             if mime_type == "Folder":
                 msg += f"\n<b>SubFolders: </b>{folders}"
                 msg += f"\n<b>Files: </b>{files}"
-            if (
+            if self.is_buzzheavier:
+                buttons = ButtonMaker()
+                buttons.url_button("☁️ Cloud Link", link)
+                button = buttons.build_menu()
+            elif (
                 link
                 or rclone_path
                 and Config.RCLONE_SERVE_URL
@@ -489,6 +493,28 @@ class TaskListener(TaskConfig):
             except:
                 pass
             self._alldebrid_magnet_id = 0
+
+        torbox_torrent_id = getattr(self, "_torbox_torrent_id", 0) or 0
+        torbox_web_id = getattr(self, "_torbox_web_id", 0) or 0
+
+        if torbox_torrent_id or torbox_web_id:
+            try:
+                from ..mirror_leech_utils.download_utils.torbox_resolver import (
+                    delete_torrent,
+                    delete_web_download,
+                )
+
+                if torbox_torrent_id:
+                    await delete_torrent(torbox_torrent_id)
+
+                if torbox_web_id:
+                    await delete_web_download(torbox_web_id)
+
+            except:
+                pass
+
+        self._torbox_torrent_id = 0
+        self._torbox_web_id = 0
         msg = f"{self.tag} Download: {escape(str(error))}"
         await send_message(self.message, msg, button)
         if count == 0:
