@@ -32,6 +32,7 @@ class ExternalQbitStatus:
         self.is_qbit = True
         self.is_torrent = True
         self.is_cancelled = False
+        self.mid = task_key                # used by any code referencing listener.mid
         self.seeding = False               # needed so get_task_by_gid calls update()
         self.subname = ""
         self.show_progress = True          # flag read as task.listener.progress in status rendering

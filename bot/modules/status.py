@@ -114,7 +114,7 @@ async def status_pages(_, query):
         await auto_delete_message(res)
         return
     if data[2] == "cancel":
-        mid = int(data[3])
+        mid = int(data[3]) if data[3].isdigit() else data[3]
         await delete_message(query.message)
         await _handle_cancel(query, mid, key)
         return
